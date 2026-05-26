@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ToolDefinition, ToolHandler } from './types';
+import { buildGame } from '@/lib/build/packager';
 
 function validatePath(userPath: string, workspaceRoot: string): string {
   if (userPath.includes('..')) {
@@ -22,8 +23,17 @@ function validatePath(userPath: string, workspaceRoot: string): string {
 
 const readFileDef: ToolDefinition = {
   name: 'read_file',
-  description: 'Read the contents of a file within the user space.',
-  parameters: { type: 'object', properties: { path: { type: 'string', description: 'Relative or absolute path to the file (must be within workspace root)' } }, required: ['path'], additionalProperties: false },
+  description: 'Read the contents of a file within the user space. Use offset and limit to read specific line ranges in large files (line numbers are 1-based, first line is 1).',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Relative or absolute path to the file (must be within workspace root)' },
+      offset: { type: 'number', description: 'Line number to start reading from (1-based, default: 1)' },
+      limit: { type: 'number', description: 'Maximum number of lines to read (default: all)' },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
 };
 
 const writeFileDef: ToolDefinition = {
@@ -56,6 +66,21 @@ const loadSkillsDef: ToolDefinition = {
   parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
 };
 
+const grepFileDef: ToolDefinition = {
+  name: 'grep_file',
+  description: 'Search for a regex pattern in files. If path is a directory, searches recursively (skips output/ and node_modules). Returns matching lines with file path, line number, and optional context lines.',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'File or directory to search (must be within workspace root)' },
+      pattern: { type: 'string', description: 'JavaScript regex pattern to search for (e.g., "export function clamp", "class GameLoop")' },
+      context: { type: 'number', description: 'Number of context lines to show before and after each match (default: 0)' },
+    },
+    required: ['path', 'pattern'],
+    additionalProperties: false,
+  },
+};
+
 const writeTodoDef: ToolDefinition = {
   name: 'write_todo',
   description: 'Write a game design plan as a markdown checklist to todo.md. Use "- [ ]" for pending, "- [x]" for complete. After completing a step, use edit_file to toggle it.',
@@ -69,7 +94,24 @@ const setErrorDef: ToolDefinition = {
 };
 
 async function readFileHandler(args: Record<string, unknown>, root: string) {
-  return fs.readFileSync(validatePath(String(args.path), root), 'utf-8');
+  const content = fs.readFileSync(validatePath(String(args.path), root), 'utf-8');
+  const lines = content.split('\n');
+  const totalLines = lines.length;
+  const offset = typeof args.offset === 'number' ? Math.max(1, Math.floor(args.offset)) : 1;
+  const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : undefined;
+  const start = offset - 1;
+  const end = limit ? Math.min(start + limit, totalLines) : totalLines;
+
+  if (start >= totalLines) return `(file has ${totalLines} lines, offset ${offset} is beyond end)`;
+
+  const result = [];
+  if (offset > 1 || limit) {
+    result.push(`(lines ${start + 1}-${end} of ${totalLines})`);
+  }
+  for (let i = start; i < end; i++) {
+    result.push(lines[i]);
+  }
+  return result.join('\n');
 }
 async function writeFileHandler(args: Record<string, unknown>, root: string) {
   const p = validatePath(String(args.path), root);
@@ -91,9 +133,11 @@ async function listDirHandler(args: Record<string, unknown>, root: string) {
   return entries.map(e => e.isDirectory() ? `${e.name}/` : e.name).join('\n');
 }
 async function buildGameHandler(_: Record<string, unknown>, root: string) {
-  const { buildGame } = await import('@/lib/build/packager');
   const result = buildGame(root);
-  return result.errors.length > 0 ? `Build completed with warnings: ${result.errors.join('; ')}` : `Game built successfully.`;
+  if (result.errors.length > 0) {
+    return `Build failed: ${result.errors.join('; ')}. Fix the errors in scripts/ and call build_game again.`;
+  }
+  return `Game built successfully. Output saved to output/index.html. Your game is ready to play in the preview panel.`;
 }
 async function loadSkillsHandler(_: Record<string, unknown>, root: string) {
   const dir = path.join(root, 'skills', 'examples');
@@ -120,6 +164,60 @@ async function writeTodoHandler(args: Record<string, unknown>, root: string) {
   const done = (c.match(/- \[x\]/g) || []).length;
   return `Plan written to todo.md: ${done} done, ${pending} pending`;
 }
+
+async function grepFileHandler(args: Record<string, unknown>, root: string) {
+  const filePath = validatePath(String(args.path), root);
+  const pattern = String(args.pattern);
+  const contextLines = typeof args.context === 'number' ? Math.floor(args.context) : 0;
+  let regex: RegExp;
+  try { regex = new RegExp(pattern, 'g'); } catch { return `Invalid regex pattern: ${pattern}`; }
+
+  const results: string[] = [];
+  const searchFile = (fp: string) => {
+    try {
+      const content = fs.readFileSync(fp, 'utf-8');
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          if (contextLines > 0) {
+            const start = Math.max(0, i - contextLines);
+            const end = Math.min(lines.length, i + contextLines + 1);
+            for (let j = start; j < end; j++) {
+              results.push(`${fp}:${j + 1}${j === i ? '>' : ' '}: ${lines[j]}`);
+            }
+            results.push('---');
+          } else {
+            results.push(`${fp}:${i + 1}: ${lines[i]}`);
+          }
+        }
+      }
+    } catch { /* skip unreadable */ }
+  };
+
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.isFile()) {
+      searchFile(filePath);
+    } else if (stat.isDirectory()) {
+      const walk = (dir: string) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const e of entries) {
+          const p = path.join(dir, e.name);
+          if (e.isDirectory()) {
+            if (e.name === 'output' || e.name === 'node_modules') continue;
+            walk(p);
+          } else {
+            searchFile(p);
+          }
+        }
+      };
+      walk(filePath);
+    }
+  } catch { /* path not found */ }
+
+  return results.length > 0 ? results.join('\n') : `No matches for "${pattern}"`;
+}
+
 async function setErrorHandler(args: Record<string, unknown>) {
   return String(args.message);
 }
@@ -129,6 +227,7 @@ export const toolRegistry: ToolHandler[] = [
   { definition: writeFileDef, handler: writeFileHandler },
   { definition: editFileDef, handler: editFileHandler },
   { definition: listDirDef, handler: listDirHandler },
+  { definition: grepFileDef, handler: grepFileHandler },
   { definition: buildGameDef, handler: buildGameHandler },
   { definition: loadSkillsDef, handler: loadSkillsHandler },
   { definition: writeTodoDef, handler: writeTodoHandler },

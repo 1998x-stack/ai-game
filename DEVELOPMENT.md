@@ -101,6 +101,20 @@ rm -rf .next && npm run build # after npm run dev
 #### .gitignore Pattern Scoping
 The pattern `build/` in `.gitignore` matches ANY directory named `build` (including `app/api/build/` and `lib/build/`). Use `/build/` to scope to root-level only. Same applies to `output/`, `dist/`, and similar patterns.
 
+#### Packager Must Use Static Import
+The `buildGameHandler` in `tools.ts` imports the packager. **Always use static import** (`import { buildGame } from '@/lib/build/packager'`) — never `await import('@/lib/build/packager')`. Dynamic imports route through Next.js webpack bundling and fail with `Cannot find module './_rsc_lib_build_packager_ts.js'` when the `.next` cache is stale. The packager is pure Node.js (only `fs` + `path`) — no webpack needed.
+
+#### Build Error Messages Must Be Actionable
+When the build tool returns errors, the message must tell the agent WHAT TO DO, not just what happened:
+```typescript
+// ✅ Correct — clear action instruction
+return `Build failed: ${result.errors.join('; ')}. Fix the errors in scripts/ and call build_game again.`;
+
+// ❌ Wrong — agent doesn't know next step
+return `Build completed with warnings: ${result.errors.join('; ')}`;
+```
+Use "Build failed" not "Build completed with warnings" for actual errors. Always include a recovery instruction.
+
 ### Frontend Gotchas
 
 #### Settings Initialization
