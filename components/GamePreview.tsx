@@ -68,7 +68,7 @@ export default function GamePreview({ gameUrl, onError, isBuilding }: Props) {
   return (
     <div
       ref={containerRef}
-      className="relative flex flex-col h-full bg-[#0a0a1a]"
+      className="relative flex flex-col h-full bg-panel-bg-deep"
     >
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-panel-border bg-panel-bg/80 shrink-0">
@@ -82,6 +82,7 @@ export default function GamePreview({ gameUrl, onError, isBuilding }: Props) {
             disabled={!gameUrl}
             className="p-1.5 text-panel-muted hover:text-panel-text hover:bg-white/5 rounded transition-colors disabled:opacity-30"
             title="Refresh game"
+            aria-label="Refresh game"
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
@@ -89,7 +90,8 @@ export default function GamePreview({ gameUrl, onError, isBuilding }: Props) {
             onClick={handleFullscreen}
             disabled={!gameUrl}
             className="p-1.5 text-panel-muted hover:text-panel-text hover:bg-white/5 rounded transition-colors disabled:opacity-30"
-            title="Fullscreen"
+            title={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
           >
             {fullscreen ? (
               <Minimize2 className="w-3.5 h-3.5" />
@@ -109,7 +111,7 @@ export default function GamePreview({ gameUrl, onError, isBuilding }: Props) {
               ref={iframeRef}
               src={gameUrl}
               sandbox="allow-scripts"
-              className="absolute inset-0 w-full h-full border-0 bg-[#0a0a1a]"
+              className="absolute inset-0 w-full h-full border-0 bg-panel-bg-deep"
               title="Game Preview"
               onLoad={() => {
                 // If the iframe loads but doesn't send game-ready, mark as loaded
@@ -119,16 +121,19 @@ export default function GamePreview({ gameUrl, onError, isBuilding }: Props) {
 
             {/* Building overlay */}
             {isBuilding && (
-              <div className="absolute inset-0 bg-[#0a0a1a]/90 flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-8 h-8 text-panel-accent animate-spin" />
-                <p className="text-sm text-panel-muted">Building your game...</p>
+              <div className="absolute inset-0 bg-panel-bg-deep/90 flex flex-col items-center justify-center gap-3 backdrop-blur-sm">
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-panel-accent/20 blur-xl animate-pulse" />
+                  <Loader2 className="w-10 h-10 text-panel-accent animate-spin relative" />
+                </div>
+                <p className="text-sm text-panel-muted animate-pulse">Building your game...</p>
               </div>
             )}
 
             {/* Loading overlay (shown until iframe signals ready) */}
             {!isBuilding && !loaded && (
-              <div className="absolute inset-0 bg-[#0a0a1a]/80 flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-6 h-6 text-panel-muted animate-spin" />
+              <div className="absolute inset-0 bg-panel-bg-deep/80 flex flex-col items-center justify-center gap-3 animate-fade-in-up">
+                <div className="w-8 h-8 border-2 border-panel-muted/30 border-t-panel-muted rounded-full animate-spin" />
                 <p className="text-xs text-panel-muted">Loading game...</p>
               </div>
             )}

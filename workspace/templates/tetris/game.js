@@ -478,10 +478,10 @@ export default class TetrisGame {
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#45e8d4';
         ctx.font = 'bold 36px monospace';
-        ctx.fillText(title, COLS * TILE / 2, DESIGN_H / 2 - 30);
+        ctx.fillText(title, DESIGN_W / 2, DESIGN_H / 2 - 30);
         ctx.fillStyle = '#aaa';
         ctx.font = '14px monospace';
-        ctx.fillText(subtitle, COLS * TILE / 2, DESIGN_H / 2 + 15);
+        ctx.fillText(subtitle, DESIGN_W / 2, DESIGN_H / 2 + 15);
     }
 
     saveHighScore() {

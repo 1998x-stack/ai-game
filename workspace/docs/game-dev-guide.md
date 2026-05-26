@@ -37,7 +37,7 @@ function render() {
 - `utils.js` is pre-loaded in the same module scope — use its classes directly, never redeclare them
 - Always call `input.endFrame()` at the end of `update()` to clear `justPressed`/`justReleased` flags
 - `GameLoop` handles requestAnimationFrame, delta time capping, and pause/resume internally
-- Call `build_game()` tool to package and preview
+- Call the `build_game` tool to package and preview
 
 ---
 
@@ -139,14 +139,14 @@ const ctx = canvas.getContext('2d');
 
 ## Build & Preview
 
-After writing game code, call the `build_game()` tool to package everything:
+After writing game code, call the `build_game` tool to package everything:
 
 1. The build pipeline concatenates `scripts/utils.js` + `scripts/game.js` into a single `<script type="module">` block
 2. Assets from `assets/` are embedded as base64 data URIs in `window.__ASSETS__`
 3. The output is written to `workspace/output/index.html`
 4. The game appears in the preview panel automatically
 
-**Build ordering:** `utils.js` first, then `main.js`/`game.js`, then alphabetical. All scripts share the same module scope.
+**Build ordering:** `utils.js` first, then `game.js`. All scripts share the same module scope.
 
 The preview panel sends runtime errors back to the chat via `postMessage` with `{ type: 'game-error', message, source, lineno, colno }`.
 

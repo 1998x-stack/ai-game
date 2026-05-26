@@ -22,7 +22,7 @@ workspace/
 - Write all game logic in `scripts/game.js` only
 - Import from `utils.js` via module scope — classes and functions are already loaded
 - Place image and audio files in `assets/` — they're embedded as `window.__ASSETS__[filename]` at build time
-- Never modify `utils.js`, `agent.md`, or files outside `scripts/` and `assets/`
+- Do not modify or delete existing exports in `utils.js` (you may APPEND new ones). Never modify `agent.md` or files outside `scripts/` and `assets/`.
 
 **Loading assets at runtime:**
 ```js

@@ -3,6 +3,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const USER_SPACE_DIR = path.join(process.cwd(), 'user_space');
 
 export async function GET(
@@ -11,6 +13,11 @@ export async function GET(
 ) {
   try {
     const { sessionId } = params;
+
+    // Validate sessionId format — prevent path traversal
+    if (!UUID_RE.test(sessionId)) {
+      return new NextResponse('Invalid session ID format', { status: 400 });
+    }
 
     // Try in-memory Map first, then fall back to filesystem (Map may be
     // wiped by Next.js HMR after code changes during dev)

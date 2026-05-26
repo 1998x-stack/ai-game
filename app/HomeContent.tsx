@@ -5,6 +5,7 @@ import SettingsModal, { type AppSettings } from '@/components/SettingsModal';
 import ErrorConsole, { type GameError } from '@/components/ErrorConsole';
 import ChatPanel, { type ChatMessage } from '@/components/ChatPanel';
 import GamePreview from '@/components/GamePreview';
+import { Loader2 } from 'lucide-react';
 
 const STORAGE_KEY = 'ai-game-settings';
 
@@ -25,6 +26,8 @@ export default function HomeContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [leftWidth, setLeftWidth] = useState(40);
   const [mobileView, setMobileView] = useState<'chat' | 'game'>('chat');
+  const [restoringSession, setRestoringSession] = useState(false);
+  const [confirmNewGame, setConfirmNewGame] = useState(false);
 
   const isDragging = useRef(false);
 
@@ -45,10 +48,18 @@ export default function HomeContent() {
     const params = new URLSearchParams(window.location.search);
     if (!params.get('session')) return;
 
+    setRestoringSession(true);
     fetch(`/api/session/${sessionId}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) return;
+        if (data.error) {
+          const errMsg: ChatMessage = {
+            role: 'agent',
+            content: `Could not restore previous session: ${data.error}. Starting a fresh session.`,
+          };
+          setMessages([errMsg]);
+          return;
+        }
         const loaded: ChatMessage[] = [];
         for (const msg of data.messages) {
           if (msg.role === 'user') {
@@ -70,7 +81,14 @@ export default function HomeContent() {
         }
       })
       .catch(() => {
-        // session not found — start fresh
+        const errMsg: ChatMessage = {
+          role: 'agent',
+          content: 'Could not load previous session — it may have expired. Start a new conversation below.',
+        };
+        setMessages([errMsg]);
+      })
+      .finally(() => {
+        setRestoringSession(false);
       });
   }, [sessionId]);
 
@@ -214,10 +232,20 @@ export default function HomeContent() {
   );
 
   const handleNewGame = useCallback(() => {
+    // If there are messages or a game, require confirmation
+    if (messages.length > 0 || gameUrl) {
+      setConfirmNewGame(true);
+      return;
+    }
+    doNewGame();
+  }, [messages.length, gameUrl]);
+
+  const doNewGame = useCallback(() => {
     setSessionId(crypto.randomUUID());
     setMessages([]);
     setGameUrl(null);
     setErrors([]);
+    setConfirmNewGame(false);
   }, []);
 
   const handleSettingsSave = useCallback((s: AppSettings) => {
@@ -274,6 +302,16 @@ export default function HomeContent() {
 
   return (
     <div className="h-screen w-screen overflow-hidden flex">
+      {/* Restoring session overlay */}
+      {restoringSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 px-8 py-6 rounded-lg bg-panel-bg border border-panel-border shadow-2xl">
+            <Loader2 className="w-6 h-6 text-panel-accent animate-spin" />
+            <p className="text-sm text-panel-muted">Restoring previous session...</p>
+          </div>
+        </div>
+      )}
+
       {/* Mobile toggle tabs */}
       {isMobile && (
         <div className="fixed top-0 left-0 right-0 z-30 flex border-b border-panel-border bg-panel-bg">
@@ -327,7 +365,7 @@ export default function HomeContent() {
       {!isMobile && (
         <div
           onMouseDown={handleMouseDown}
-          className="w-[3px] cursor-col-resize bg-panel-border hover:bg-panel-accent/60 active:bg-panel-accent transition-colors shrink-0 relative z-10"
+          className="w-[4px] cursor-col-resize bg-panel-border hover:bg-panel-accent/70 active:bg-panel-accent hover:shadow-[0_0_12px_-2px_rgba(233,69,96,0.4)] transition-all duration-200 shrink-0 relative z-10"
         />
       )}
 
@@ -349,6 +387,42 @@ export default function HomeContent() {
 
         <ErrorConsole errors={errors} onClear={handleClearErrors} />
       </div>
+
+      {/* Confirm new game dialog */}
+      {confirmNewGame && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmNewGame(false)}
+          />
+          <div
+            className="relative w-full max-w-sm mx-4 rounded-lg border border-panel-border bg-panel-bg shadow-2xl shadow-black/50 p-6"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Confirm new game"
+          >
+            <h3 className="text-base font-semibold text-panel-text mb-2">Start a new game?</h3>
+            <p className="text-sm text-panel-muted mb-5">
+              This will clear the current conversation and game. Your previous session won&apos;t be recoverable.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setConfirmNewGame(false)}
+                className="px-4 py-2 text-sm text-panel-muted hover:text-panel-text transition-colors rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doNewGame}
+                className="px-4 py-2 text-sm font-medium text-white bg-panel-accent rounded hover:bg-red-500/90 transition-colors"
+                autoFocus
+              >
+                Start New
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Settings Modal */}
       <SettingsModal

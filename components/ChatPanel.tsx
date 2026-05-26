@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Settings, Plus, Loader2, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react';
+import { Send, Settings, Plus, Loader2, ChevronDown, ChevronRight, Copy, Check, AlertCircle } from 'lucide-react';
 
 export interface ToolCall {
   name: string;
@@ -308,6 +308,7 @@ export default function ChatPanel({
           <button
             onClick={onNewGame}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-panel-muted hover:text-panel-text hover:bg-white/5 rounded transition-colors"
+            aria-label="Start a new game session"
           >
             <Plus className="w-3.5 h-3.5" />
             New Game
@@ -315,6 +316,7 @@ export default function ChatPanel({
           <button
             onClick={onOpenSettings}
             className="p-1.5 text-panel-muted hover:text-panel-text hover:bg-white/5 rounded transition-colors"
+            aria-label="Open settings"
           >
             <Settings className="w-4 h-4" />
           </button>
@@ -325,8 +327,14 @@ export default function ChatPanel({
         <SessionBar sessionId={sessionId} />
       )}
 
-      {/* Messages */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      {/* Messages — aria-live region for screen reader announcements */}
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+        role="log"
+        aria-live="polite"
+        aria-label="Chat messages"
+      >
         {messages.length === 0 ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
@@ -364,8 +372,8 @@ export default function ChatPanel({
             </div>
           </div>
         ) : (
-          messages.map((msg, i) => (
-            <div key={i}>
+            messages.map((msg, i) => (
+            <div key={i} className="animate-message-in">
               {msg.role === 'user' ? (
                 /* User bubble */
                 <div className="flex justify-end">
@@ -376,6 +384,20 @@ export default function ChatPanel({
               ) : (
                 /* Agent message */
                 <div className="flex justify-start">
+                  {msg.content.startsWith('Network error:') || msg.content.startsWith('Could not') ? (
+                    /* Error message — visually distinct */
+                    <div className="max-w-[92%] px-4 py-2.5 rounded-2xl rounded-bl-md bg-red-950/60 border border-red-500/20 text-red-200 text-sm leading-relaxed">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                        <div>
+                          {renderContent(msg.content)}
+                          <p className="mt-1 text-xs text-red-400/70">
+                            You can try sending your message again, or start a new game session.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="max-w-[92%] px-4 py-2.5 rounded-2xl rounded-bl-md bg-panel-surface text-panel-text text-sm leading-relaxed">
                     {renderContent(msg.content)}
 
@@ -400,6 +422,7 @@ export default function ChatPanel({
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               )}
             </div>
@@ -438,12 +461,13 @@ export default function ChatPanel({
               placeholder="Describe the game you want to create..."
               rows={1}
               disabled={isGenerating}
-              className="w-full resize-none bg-panel-surface border border-panel-border rounded-xl px-4 py-2.5 pr-11 text-sm text-panel-text placeholder-panel-muted/40 focus:outline-none focus:ring-2 focus:ring-panel-accent/30 focus:border-panel-accent transition-shadow disabled:opacity-40"
+              className="w-full resize-none bg-panel-surface border border-panel-border rounded-xl px-4 py-2.5 pr-11 text-sm text-panel-text placeholder:text-panel-muted/60 focus:outline-none focus:ring-2 focus:ring-panel-accent/30 focus:border-panel-accent transition-shadow disabled:opacity-40"
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isGenerating}
-              className="absolute right-1.5 bottom-1.5 p-1.5 rounded-lg bg-panel-accent text-white hover:bg-red-500/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="absolute right-1.5 bottom-1.5 p-1.5 rounded-lg bg-panel-accent text-white hover:bg-panel-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              aria-label="Send message"
             >
               {isGenerating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -460,13 +484,14 @@ export default function ChatPanel({
 
 function ReasoningBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(true);
-  const collapsed = !expanded && content.length > 200;
 
   return (
     <div className="mt-2 rounded-lg bg-amber-500/5 border border-amber-500/15 overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-amber-400/80 hover:text-amber-300 transition-colors"
+        aria-expanded={expanded}
+        aria-label={expanded ? 'Hide reasoning' : 'Show reasoning'}
       >
         <ChevronDown
           className={`w-3 h-3 transition-transform ${expanded ? '' : '-rotate-90'}`}
@@ -502,6 +527,7 @@ function SessionBar({ sessionId }: { sessionId: string }) {
         onClick={handleCopy}
         className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors text-panel-muted hover:text-panel-text"
         title="Copy resume link"
+        aria-label={copied ? 'Resume link copied' : 'Copy session resume link'}
       >
         {copied ? (
           <Check className="w-3 h-3 text-emerald-400" />
@@ -521,6 +547,8 @@ function ToolCallCard({ call }: { call: ToolCall }) {
     <button
       onClick={() => setExpanded((v) => !v)}
       className="w-full text-left text-xs bg-black/20 border border-white/5 rounded-lg overflow-hidden transition-colors hover:bg-black/30"
+      aria-expanded={expanded}
+      aria-label={`Tool call: ${call.name}`}
     >
       <div className="flex items-center gap-2 px-2.5 py-1.5">
         {expanded ? (
@@ -555,7 +583,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   };
 
   return (
-    <div className="my-1.5 rounded-lg overflow-hidden bg-gray-950 border border-white/5">
+    <div className="my-1.5 rounded-lg overflow-hidden bg-panel-bg-deep border border-white/5">
       {lang && (
         <div className="flex items-center justify-between px-3 py-1.5 bg-white/[0.03] border-b border-white/5">
           <span className="text-[11px] text-panel-muted/50 font-mono uppercase tracking-wider">
@@ -571,6 +599,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
           onClick={handleCopy}
           className="absolute top-1.5 right-1.5 p-1 rounded bg-white/10 hover:bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity text-panel-muted/60 hover:text-panel-text"
           title="Copy code"
+          aria-label={copied ? 'Code copied' : 'Copy code to clipboard'}
         >
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         </button>

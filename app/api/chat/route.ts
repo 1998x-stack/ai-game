@@ -117,11 +117,11 @@ export async function POST(request: Request) {
     }
 
     // Validate provider at runtime
-    if (config.provider && !ALLOWED_PROVIDERS.has(config.provider.toLowerCase())) {
-      return Response.json(
-        { error: `Unsupported provider: "${config.provider}"` },
-        { status: 400 },
-      );
+    if (!config?.provider || !ALLOWED_PROVIDERS.has(config.provider.toLowerCase())) {
+      const msg = config?.provider
+        ? `Unsupported provider: "${config.provider}"`
+        : 'Missing required field: config.provider';
+      return Response.json({ error: msg }, { status: 400 });
     }
 
     let agent = agentSessions.get(sessionId);
@@ -154,9 +154,9 @@ export async function POST(request: Request) {
       parts.push(
         '\n\nWhen the user asks for a game, generate the code in scripts/game.js using the patterns from the scaffold.',
         '\n\nCRITICAL: scripts/utils.js is pre-loaded in the same module scope before game.js.',
-        'All exported classes (GameLoop, InputManager, CollisionDetector, SpriteManager, Animation, SoundManager, ObjectPool) and functions (randomInt, clamp, lerp, distance, angleBetween, setupCanvas) are already available — use them directly.',
+        'All exported classes (GameLoop, InputManager, CollisionDetector, SpriteManager, Animation, SoundManager, ObjectPool, Vector2, Camera, Timer, ScreenShake, SeededRandom) and functions (randomInt, clamp, lerp, distance, angleBetween, setupCanvas) and constants (Easing) are already available — use them directly.',
         'Do NOT redeclare, re-export, or copy utility code into game.js. This causes "Identifier has already been declared" errors.',
-        '\nYou MAY append new export functions/classes to the END of scripts/utils.js to extend the library. After adding functions, update lib/index.md to document them.',
+        '\nYou MAY append new export functions/classes to the END of scripts/utils.js to extend the library. You MAY also append new gotchas to the END of docs/gotchas.md when you encounter and solve problems (follow the format at top of the file). After adding functions or gotchas, update lib/index.md to document them.',
         '\nAfter writing code, always call build_game. If build_game reports errors, read the output, fix the code, and rebuild. Use set_error only for unrecoverable issues. After building, briefly describe the game features and how to play. Keep responses concise.',
       );
 

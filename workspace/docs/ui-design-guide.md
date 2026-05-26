@@ -389,7 +389,7 @@ Buttons are drawn shapes with centered text. Hit detection checks mouse/touch co
 
 ```js
 function drawButton(text, x, y, w, h, color = '#4488ff', hoverColor = '#66aaff') {
-    const isHovered = pointInRect(input.mouse.x, input.mouse.y, { x, y, width: w, height: h });
+    const isHovered = CollisionDetector.pointInRect(input.mouse.x, input.mouse.y, { x, y, width: w, height: h });
 
     ctx.save();
     ctx.fillStyle = isHovered ? hoverColor : color;

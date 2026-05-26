@@ -39,13 +39,15 @@ export default function ErrorConsole({ errors, onClear }: Props) {
   if (count === 0 && collapsed) return null;
 
   return (
-    <div className="border-t border-panel-border bg-[#1a0e0e]">
-      {/* Header bar */}
-      <button
-        onClick={() => setCollapsed((v) => !v)}
-        className="flex items-center justify-between w-full px-4 py-1.5 hover:bg-white/5 transition-colors"
-      >
-        <div className="flex items-center gap-2">
+    <div className="border-t border-red-900/30 bg-panel-bg-deep">
+      {/* Header bar — two independent buttons for a11y */}
+      <div className="flex items-center justify-between w-full px-4 py-1.5">
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          className="flex items-center gap-2 hover:bg-white/5 transition-colors rounded px-1 py-0.5"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Show errors' : 'Hide errors'}
+        >
           <AlertCircle className="w-3.5 h-3.5 text-red-400" />
           <span className="text-xs font-medium text-red-300">Errors</span>
           {count > 0 && (
@@ -53,30 +55,28 @@ export default function ErrorConsole({ errors, onClear }: Props) {
               {count}
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          {count > 0 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onClear();
-              }}
-              className="text-[11px] text-panel-muted hover:text-panel-text transition-colors"
-            >
-              Clear
-            </button>
-          )}
           {collapsed ? (
             <ChevronUp className="w-3.5 h-3.5 text-panel-muted" />
           ) : (
             <ChevronDown className="w-3.5 h-3.5 text-panel-muted" />
           )}
+        </button>
+        <div className="flex items-center gap-2">
+          {count > 0 && (
+            <button
+              onClick={onClear}
+              className="text-[11px] text-panel-muted hover:text-panel-text transition-colors rounded px-2 py-0.5"
+              aria-label="Clear all errors"
+            >
+              Clear
+            </button>
+          )}
         </div>
-      </button>
+      </div>
 
       {/* Error list */}
       {!collapsed && count > 0 && (
-        <div className="max-h-[120px] overflow-y-auto px-4 pb-2 space-y-1">
+        <div className="max-h-[120px] overflow-y-auto px-4 pb-2 space-y-1 animate-fade-in-up">
           {enriched.map((err) => (
             <div
               key={err.id}

@@ -2,6 +2,11 @@
 
 Common mistakes and anti-patterns in HTML5 canvas game development, with concrete examples.
 
+<!-- EXTENSIBLE: This file is a living knowledge base. Agents may APPEND new gotchas -->
+<!-- at the bottom when they encounter and solve problems during game generation. -->
+<!-- Format: ## {N}. {Title}\n\n**Problem**: ...\n\n**Wrong**:\n```js\n...\n```\n\n**Correct**:\n```js\n...\n``` -->
+<!-- This creates a learning flywheel — mistakes get recorded once, prevented forever. -->
+
 ---
 
 ## 1. Snake Cannot Turn 180 Degrees

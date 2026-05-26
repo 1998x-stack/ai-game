@@ -4,6 +4,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function formatMessages(history: Array<{ role: string; content: string; tool_calls?: unknown; reasoning_content?: string }>) {
   return history
     .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -20,6 +23,11 @@ export async function GET(
   { params }: { params: { sessionId: string } },
 ) {
   const { sessionId } = params;
+
+  // Validate sessionId format — prevent path traversal
+  if (!UUID_RE.test(sessionId)) {
+    return NextResponse.json({ error: 'Invalid session ID format' }, { status: 400 });
+  }
 
   const workspace = getWorkspace(sessionId);
   const hasWorkspaceDir = workspace !== null;

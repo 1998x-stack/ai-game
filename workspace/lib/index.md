@@ -68,7 +68,6 @@ new InputManager(canvas)
 | `mouse.x` | `number` | Mouse X in canvas coordinates |
 | `mouse.y` | `number` | Mouse Y in canvas coordinates |
 | `mouse.buttons` | `Record<number, boolean>` | Mouse button states (0=left, 1=middle, 2=right) |
-| `keys` | `Record<string, boolean>` | Raw key states |
 
 **Key codes** (use with `isDown` / `justPressed`):
 `'ArrowUp'`, `'ArrowDown'`, `'ArrowLeft'`, `'ArrowRight'`, `'Space'`, `'Enter'`, `'KeyW'`, `'KeyA'`, `'KeyS'`, `'KeyD'`, `'KeyP'`, `'KeyR'`, `'KeyZ'`, `'ControlLeft'`, `'ControlRight'`, `'MetaLeft'`, `'MetaRight'`, `'ShiftLeft'`, `'ShiftRight'`
@@ -98,9 +97,9 @@ Static collision detection methods. No constructor needed.
 **Methods (all static):**
 | Method | Description |
 |--------|-------------|
-| `aabb(r1, r2)` | AABB collision between two `{x, y, w, h}` rectangles |
+| `aabb(r1, r2)` | AABB collision between two `{x, y, width, height}` rectangles |
 | `circle(c1, c2)` | Circle collision between two `{x, y, r}` circles |
-| `pointInRect(px, py, rect)` | Point `(px,py)` inside `{x, y, w, h}` rectangle |
+| `pointInRect(px, py, rect)` | Point `(px,py)` inside `{x, y, width, height}` rectangle |
 | `circleAABB(circle, rect)` | Circle-AABB collision |
 | `lineCircle(x1,y1,x2,y2, circle)` | Line segment vs circle collision |
 
@@ -137,10 +136,10 @@ new SpriteManager()
 **Example:**
 ```js
 const sprites = new SpriteManager();
-await sprites.loadAll([
-  { name: 'player', src: window.__ASSETS__['player.png'] },
-  { name: 'enemy', src: window.__ASSETS__['enemy.png'] },
-]);
+await sprites.loadAll({
+  player: window.__ASSETS__['player.png'],
+  enemy: window.__ASSETS__['enemy.png'],
+});
 sprites.draw(ctx, 'player', x, y, 32, 32);
 ```
 
@@ -158,7 +157,7 @@ new Animation(frameCount, fps, loop?)
 |-----------|------|---------|-------------|
 | `frameCount` | `number` | required | Total frames in animation |
 | `fps` | `number` | required | Frames per second |
-| `loop` | `boolean` | `false` | Whether to loop |
+| `loop` | `boolean` | `true` | Whether to loop |
 
 **Methods:**
 | Method | Returns | Description |
@@ -166,14 +165,17 @@ new Animation(frameCount, fps, loop?)
 | `update(dt)` | `void` | Advance animation by dt seconds |
 | `reset()` | `void` | Reset to frame 0 |
 | `isDone()` | `boolean` | Animation completed (non-looping only) |
-| `getCurrentFrame()` | `number` | Current frame index (0-based) |
+
+**Properties:**
+| Property | Type | Description |
+|----------|------|-------------|
+| `frame` | `number` | Current frame index (0-based) |
 
 **Example:**
 ```js
 const anim = new Animation(4, 8, true); // 4 frames, 8 FPS, looping
 anim.update(dt);
-const frame = anim.getCurrentFrame();
-sprites.drawFrame(ctx, 'sprite', frame, 32, 32, x, y, 32, 32);
+sprites.drawFrame(ctx, 'sprite', anim.frame, 32, 32, x, y, 32, 32);
 ```
 
 ---
@@ -189,7 +191,7 @@ new SoundManager()
 **Methods:**
 | Method | Description |
 |--------|-------------|
-| `init()` | Initialize AudioContext (call on first user interaction) |
+| `init()` | `boolean` | Initialize AudioContext (call on first user interaction). Returns `true` if successful. |
 | `load(name, url)` | Load and decode audio from URL |
 | `play(name, volume?)` | Play loaded sound (volume 0-1, default 1) |
 | `beep(freq?, duration?, volume?)` | Play a synthesized beep tone |
@@ -219,7 +221,7 @@ new ObjectPool(createFn, resetFn, initialSize?)
 |-----------|------|-------------|
 | `createFn` | `() => T` | Factory — creates a new object |
 | `resetFn` | `(obj: T) => void` | Reset object before reuse |
-| `initialSize` | `number` | Pre-allocate N objects (default 0) |
+| `initialSize` | `number` | Pre-allocate N objects (default 20) |
 
 **Methods:**
 | Method | Description |
@@ -533,3 +535,13 @@ To extend this library, add functions or classes to `scripts/utils.js`:
 5. New exports are automatically available in `game.js` scope — no import needed.
 
 The build pipeline concatenates `utils.js` before `game.js`, so all exports (original + appended) are in scope when game code runs.
+
+## Extending Gotchas
+
+The `docs/gotchas.md` file is also extensible. When you encounter and solve
+a problem during game generation, APPEND a new gotcha to the END of
+`docs/gotchas.md` following the format template at the top of the file.
+
+This creates a learning flywheel — utilities expand with reusable code,
+gotchas expand with known pitfalls. Together they prevent repeating mistakes
+and rebuilding the same functions across sessions.

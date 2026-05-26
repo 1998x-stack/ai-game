@@ -76,6 +76,48 @@ user_space/{sessionId}/
   SoundManager — init(), load(name, url), play(name), beep(), toggleMute()
   ObjectPool — constructor(createFn, resetFn, initialSize), acquire(), release()
 
+  Vector2 — constructor(x?, y?) for 2D vector math (physics, movement, angles).
+    Methods: set(), copy(), add(), sub(), scale(), magnitude(), normalize(),
+             rotate(angle), angle(), dot(v), distanceTo(v)
+    Static: Vector2.add(), Vector2.sub(), Vector2.scale(), Vector2.fromAngle(angle, mag?)
+    Usage:
+      const vel = Vector2.fromAngle(Math.PI / 4, 300);
+      pos.add(Vector2.scale(vel, dt));
+
+  Camera — constructor(worldW, worldH, viewW, viewH) for scrolling and parallax.
+    Methods: follow(x, y, dt), apply(ctx), restore(ctx), shake(intensity)
+    Properties: smoothFactor (default 0.08), deadzone (30% of viewport)
+    Usage:
+      camera.follow(player.x, player.y, dt);
+      camera.apply(ctx); // before world draw
+      camera.restore(ctx); // after world draw, before HUD
+
+  Timer — constructor(duration, autoReset?) for cooldowns and timed events.
+    Methods: update(dt), isDone(), progress(), remaining(), reset(newDuration?)
+    Usage:
+      const cd = new Timer(0.5);
+      cd.update(dt);
+      if (cd.isDone()) { attack(); cd.reset(); }
+
+  ScreenShake — trauma-based screen shake with exponential decay.
+    Methods: trigger(intensity?, decay?), update(dt), apply(ctx), restore(ctx)
+    Usage:
+      shake.trigger(10, 5); // on explosion
+      shake.update(dt);     // each frame
+      shake.apply(ctx);     // before drawing world
+      shake.restore(ctx);   // after drawing world
+
+  SeededRandom — deterministic RNG (Mulberry32) for procedural generation.
+    Methods: next(), range(min, max), reset()
+    Usage:
+      const rng = new SeededRandom(42);
+      const val = rng.range(1, 10); // same seed → same value
+
+  Easing — easing function library. All take t (0-1) and return eased 0-1.
+    Functions: linear, inQuad, outQuad, inOutQuad, inCubic, outCubic,
+               inOutCubic, inSine, outSine, inOutSine, inElastic, outElastic, outBounce
+    Usage: const t = Easing.outCubic(clamp(elapsed / duration, 0, 1));
+
   randomInt(min, max), clamp(val, min, max), lerp(a, b, t),
   distance(x1,y1,x2,y2), angleBetween(x1,y1,x2,y2),
   setupCanvas(canvasId, designW, designH)
@@ -138,7 +180,30 @@ user_space/{sessionId}/
        }
     2. Update lib/index.md with a new entry for `normalizeAngle`.
 
-  Auto-start pattern:
+## Extending Gotchas (Learning Flywheel)
+
+  When you encounter and solve a problem during game generation, record it
+  in docs/gotchas.md so it never happens again. This creates a learning
+  flywheel — every mistake is documented once and prevented forever.
+
+  Rules for appending gotchas:
+  - APPEND to the END of docs/gotchas.md only — never modify existing gotchas.
+  - Use the edit_file tool with old_str matching the LAST gotcha in the file.
+  - Follow the exact format (HTML comment template at top of the file):
+    ## {N}. {Title}
+    **Problem**: {What went wrong — be specific}
+    **Wrong**: {code that caused the error}
+    **Correct**: {fixed code}
+  - Increment the gotcha number (current count is visible at top of file).
+  - Write gotchas that are REUSABLE — not specific to one game.
+  - Update lib/index.md if the gotcha relates to a utility function.
+
+  Examples of good gotchas to append:
+  - "TextBaseline 'middle' centers on the glyph's middle, not the string"
+  - "for...in enumerates prototype properties — use for...of for arrays"
+  - "ctx.measureText().width doesn't include padding — add manually"
+
+  A. Auto-start pattern:
     At the bottom of scripts/game.js, instantiate and start your game:
       const game = new MyGame();
       game.start();
