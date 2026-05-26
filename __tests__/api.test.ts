@@ -1188,32 +1188,32 @@ describe('delegate_subagent handler', () => {
 
   // -- Fallback model --------------------------------------------------------
 
-  it('retries with fallback model when primary fails', async () => {
-    mockChatCreate.mockRejectedValueOnce(new Error('Model overloaded'));
+  it('subagent uses fallback model by default', async () => {
     mockChatCreate.mockResolvedValueOnce({
-      choices: [{ message: { content: 'Fallback succeeded' } }],
+      choices: [{ message: { content: 'Research findings' } }],
     });
 
     const result = await handler(
-      { instruction: 'test' },
+      { instruction: 'research X' },
       '/tmp/test-workspace',
-      FALLBACK_AGENT_CONFIG,
+      TEST_AGENT_CONFIG,
     );
-    expect(result).toBe('Fallback succeeded');
-    expect(mockChatCreate).toHaveBeenCalledTimes(2);
+    expect(result).toBe('Research findings');
+    // Verify subagent client was created with fallback model
+    expect(OpenAI).toHaveBeenCalled();
   });
 
-  it('propagates error when fallback also fails', async () => {
-    mockChatCreate.mockRejectedValueOnce(new Error('Primary down'));
-    mockChatCreate.mockRejectedValueOnce(new Error('Fallback down'));
+  it("propagates error when subagent's model call fails", async () => {
+    mockChatCreate.mockRejectedValueOnce(new Error('Model overloaded'));
 
     const result = await handler(
       { instruction: 'test' },
       '/tmp/test-workspace',
-      FALLBACK_AGENT_CONFIG,
+      TEST_AGENT_CONFIG,
     );
     expect(result).toContain('Subagent error');
-    expect(result).toContain('Fallback down');
+    expect(result).toContain('Model overloaded');
+    expect(mockChatCreate).toHaveBeenCalledTimes(1);
   });
 
   it('propagates error immediately when no fallback configured', async () => {

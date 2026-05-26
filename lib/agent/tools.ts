@@ -124,7 +124,7 @@ const grepFileDef: ToolDefinition = {
 
 const writeTodoDef: ToolDefinition = {
   name: 'write_todo',
-  description: 'Write or update a game design plan to todo.md. Provide a JSON array of task objects, each with "task" (description) and "status" ("pending" or "done"). The handler formats them as a markdown checklist. Returns: N done, M pending, next pending task. Use this at the start of every game to plan the work. After completing a step, use edit_file to change "- [ ]" to "- [x]" in todo.md.',
+  description: 'Write or update a game design plan to todo.md. Provide a JSON array of atomic, independently runnable tasks. Each task must have: task (description), status ("pending" or "done"), and verify (how to confirm completion — e.g., "Game compiles and snake moves with arrow keys"). Write todo.md at game start, then use edit_file to toggle "- [ ]" to "- [x]" as you complete tasks. Keep tasks small and concrete.',
   parameters: {
     type: 'object',
     properties: {
@@ -133,12 +133,13 @@ const writeTodoDef: ToolDefinition = {
         items: {
           type: 'object',
           properties: {
-            task: { type: 'string', description: 'Task description' },
+            task: { type: 'string', description: 'Task description (atomic, concrete action)' },
             status: { type: 'string', enum: ['pending', 'done'], description: 'Task status' },
+            verify: { type: 'string', description: 'How to verify this task is complete (e.g., "Game compiles and snake moves with arrow keys")' },
           },
-          required: ['task', 'status'],
+          required: ['task', 'status', 'verify'],
         },
-        description: 'Array of task objects to write to todo.md',
+        description: 'Array of atomic, verifiable task objects',
       },
     },
     required: ['tasks'],
@@ -343,14 +344,15 @@ async function loadSkillsHandler(_: Record<string, unknown>, root: string) {
   return JSON.stringify(skills, null, 2);
 }
 async function writeTodoHandler(args: Record<string, unknown>, root: string) {
-  const tasks = args.tasks as Array<{ task: string; status: string }> | undefined;
+  const tasks = args.tasks as Array<{ task: string; status: string; verify: string }> | undefined;
   if (!Array.isArray(tasks) || tasks.length === 0) {
-    throw new Error('tasks must be a non-empty array of { task: string, status: "pending" | "done" }');
+    throw new Error('tasks must be a non-empty array of { task: string, status: "pending" | "done", verify: string }');
   }
 
   const lines = tasks.map((t) => {
     const checkbox = t.status === 'done' ? '[x]' : '[ ]';
-    return `- ${checkbox} ${t.task}`;
+    const verifyNote = t.verify ? ` — verify: ${t.verify}` : '';
+    return `- ${checkbox} ${t.task}${verifyNote}`;
   });
   const content = `# Game Plan\n\n${lines.join('\n')}\n`;
 
@@ -590,22 +592,18 @@ async function delegateSubagentHandler(
       { role: 'user', content: instruction },
     ];
 
+    const subagentModel = config.fallbackModel || CONFIG.providers.deepseek.fallbackModel;
+
     for (let iteration = 0; iteration < SUBAGENT_MAX_ITERATIONS; iteration++) {
       let response: OpenAI.Chat.Completions.ChatCompletion;
       try {
         response = await client.chat.completions.create({
-          model: config.model,
+          model: subagentModel,
           messages,
           tools: getOpenAIToolsFiltered('subagent'),
         });
       } catch (primaryErr) {
-        const fallback = config.fallbackModel;
-        if (!fallback || fallback === config.model) throw primaryErr;
-        response = await client.chat.completions.create({
-          model: fallback,
-          messages,
-          tools: getOpenAIToolsFiltered('subagent'),
-        });
+        throw primaryErr;
       }
 
       const choice = response.choices[0];

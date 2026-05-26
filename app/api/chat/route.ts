@@ -14,17 +14,26 @@ const ALLOWED_PROVIDERS = CONFIG.providers.allowed;
 function parseTodoMd(content: string): Array<{
   task: string;
   status: 'pending' | 'done';
+  verify?: string;
 }> {
-  const tasks: Array<{ task: string; status: 'pending' | 'done' }> = [];
+  const tasks: Array<{ task: string; status: 'pending' | 'done'; verify?: string }> = [];
   for (const line of content.split('\n')) {
-    const doneMatch = line.match(/^-\s*\[x\]\s+(.+)/i);
+    const doneMatch = line.match(/^-\s*\[x\]\s+(.+?)(?:\s+—\s+verify:\s+(.+))?$/i);
     if (doneMatch) {
-      tasks.push({ task: doneMatch[1].trim(), status: 'done' });
+      tasks.push({
+        task: doneMatch[1].trim(),
+        status: 'done',
+        verify: doneMatch[2]?.trim() || undefined,
+      });
       continue;
     }
-    const pendingMatch = line.match(/^-\s*\[\s*\]\s+(.+)/);
+    const pendingMatch = line.match(/^-\s*\[\s*\]\s+(.+?)(?:\s+—\s+verify:\s+(.+))?$/);
     if (pendingMatch) {
-      tasks.push({ task: pendingMatch[1].trim(), status: 'pending' });
+      tasks.push({
+        task: pendingMatch[1].trim(),
+        status: 'pending',
+        verify: pendingMatch[2]?.trim() || undefined,
+      });
     }
   }
   return tasks;

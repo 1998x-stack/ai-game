@@ -9,7 +9,7 @@ export interface ToolCall {
 }
 
 export interface TodoUpdate {
-  tasks: Array<{ task: string; status: 'pending' | 'done' }>;
+  tasks: Array<{ task: string; status: 'pending' | 'done'; verify?: string }>;
   done: number;
   pending: number;
   next?: string;
@@ -621,7 +621,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   );
 }
 
-function TodoCard({ update }: { update: { tasks: Array<{ task: string; status: 'pending' | 'done' }>; done: number; pending: number; next?: string } }) {
+function TodoCard({ update }: { update: { tasks: Array<{ task: string; status: 'pending' | 'done'; verify?: string }>; done: number; pending: number; next?: string } }) {
   const total = update.done + update.pending;
   const pct = total > 0 ? Math.round((update.done / total) * 100) : 0;
 
@@ -639,17 +639,24 @@ function TodoCard({ update }: { update: { tasks: Array<{ task: string; status: '
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="px-3 py-1.5 space-y-0.5 max-h-48 overflow-y-auto">
+      <div className="px-3 py-1.5 space-y-1 max-h-64 overflow-y-auto">
         {update.tasks.map((t, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs leading-relaxed">
+          <div key={i} className="flex items-start gap-2 text-xs leading-relaxed group">
             {t.status === 'done' ? (
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
             ) : (
               <Circle className="w-3.5 h-3.5 text-panel-muted/40 mt-0.5 shrink-0" />
             )}
-            <span className={t.status === 'done' ? 'text-panel-muted/60 line-through' : 'text-panel-text/90'}>
-              {t.task}
-            </span>
+            <div className="min-w-0">
+              <span className={t.status === 'done' ? 'text-panel-muted/60 line-through' : 'text-panel-text/90'}>
+                {t.task}
+              </span>
+              {t.verify && (
+                <span className="block text-[10px] text-panel-muted/50 mt-0.5 italic">
+                  verify: {t.verify}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>
