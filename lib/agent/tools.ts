@@ -83,26 +83,13 @@ const buildGameDef: ToolDefinition = {
 
 const loadSkillsDef: ToolDefinition = {
   name: 'load_skills',
-  description: 'Load metadata for all available skills in the skills/ directory. Returns name, description, and trigger keywords for each skill.',
+  description: 'Load metadata for all available skills in the skills/ directory. Returns name, description, and trigger keywords for each skill — use this to discover which skills apply to the current game request before reading the full skill file.',
   parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
-};
-
-const writeTodoDef: ToolDefinition = {
-  name: 'write_todo',
-  description: 'Write a game design plan as a markdown checklist to todo.md. Use this at the START of every game generation to plan your steps. Mark items as "- [ ]" (pending). After completing a step, use edit_file to change it to "- [x]".',
-  parameters: {
-    type: 'object',
-    properties: {
-      content: { type: 'string', description: 'Full markdown content. Use "- [ ] Description" for pending, "- [x] Description" for complete.' },
-    },
-    required: ['content'],
-    additionalProperties: false,
-  },
 };
 
 const setErrorDef: ToolDefinition = {
   name: 'set_error',
-  description: 'Report an error to the user when the agent encounters an unrecoverable issue.',
+  description: 'Report an error to the user when the agent encounters an unrecoverable issue. Call this when you cannot recover from a problem.',
   parameters: {
     type: 'object',
     properties: { message: { type: 'string', description: 'The error message describing what went wrong' } },
@@ -162,6 +149,7 @@ async function loadSkillsHandler(_args: Record<string, unknown>, workspaceRoot: 
   } catch {
     return JSON.stringify([]);
   }
+
   const skills: Array<{ file: string; name: string; description: string; triggers: string }> = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
@@ -178,18 +166,11 @@ async function loadSkillsHandler(_args: Record<string, unknown>, workspaceRoot: 
       if (result.name && result.description) {
         skills.push({ file: entry.name, name: result.name, description: result.description, triggers: result.triggers || '' });
       }
-    } catch { /* skip */ }
+    } catch {
+      // skip unreadable
+    }
   }
   return JSON.stringify(skills, null, 2);
-}
-
-async function writeTodoHandler(args: Record<string, unknown>, workspaceRoot: string): Promise<string> {
-  const content = String(args.content);
-  const filePath = path.join(workspaceRoot, 'todo.md');
-  fs.writeFileSync(filePath, content, 'utf-8');
-  const pending = (content.match(/- \[ \]/g) || []).length;
-  const done = (content.match(/- \[x\]/g) || []).length;
-  return `Plan written to todo.md: ${done} done, ${pending} pending`;
 }
 
 async function setErrorHandler(args: Record<string, unknown>, _root: string): Promise<string> {
@@ -205,7 +186,6 @@ export const toolRegistry: ToolHandler[] = [
   { definition: listDirDef, handler: listDirHandler },
   { definition: buildGameDef, handler: buildGameHandler },
   { definition: loadSkillsDef, handler: loadSkillsHandler },
-  { definition: writeTodoDef, handler: writeTodoHandler },
   { definition: setErrorDef, handler: setErrorHandler },
 ];
 

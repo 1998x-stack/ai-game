@@ -153,16 +153,6 @@ user_space/{sessionId}/
 
 ## Development Workflow
 
-  -1. Call write_todo to create a game design plan in todo.md.
-      Break the game into concrete steps as a markdown checklist:
-        - [ ] Research (read docs, load skills, study templates)
-        - [ ] Write core game logic (movement, collision, state machine)
-        - [ ] Add visual polish (HUD, particles, animations)
-        - [ ] Add audio (sound effects, background music)
-        - [ ] Build and test the game
-        - [ ] Describe features to the user
-      After completing each step, use edit_file to change "- [ ]" to "- [x]".
-
   0. Call load_skills() to discover available skills — it returns name,
      description, and trigger keywords for each skill. Read the full .md file
      for any skills whose triggers match the user's request.
