@@ -1002,11 +1002,37 @@ footer {
         <p>Agent 逐步展示工具调用、推理过程与代码生成，每一行代码都清晰可见，开发过程完全透明。</p>
       </div>
 
-      <div class="feature-card">
-        <div class="feature-icon">🎮</div>
-        <h3>即时预览</h3>
-        <p>右侧沙箱 iframe 直接运行生成的游戏，支持键盘、鼠标、触控操作，还可一键全屏体验。</p>
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3>知识飞轮</h3>
+          <p>脚手架包含游戏模板、20+ 反模式规则和完整 UI 设计指南。工具库和 Gotchas 可自主扩展——每次解决问题都沉淀为新知识。</p>
+        </div>
       </div>
+
+      <div class="features-grid" style="margin-top:20px">
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>子代理委托</h3>
+          <p>Agent 可同时调度多达 3 个子代理处理低信噪比研究任务，释放主 Agent 专注于游戏设计和代码生成。</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3>模型容错</h3>
+          <p>内置 fallback 机制：主模型不可用时自动切换至备用模型，确保服务持续可用。</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>自包含构建</h3>
+          <p>所有 scripts + assets → 单个 HTML 文件。零外部依赖，纯 Canvas + JavaScript。生成的游戏可独立运行。</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🌐</div>
+          <h3>会话持久化</h3>
+          <p>JSONL 文件持久化存储会话历史，服务器重启不丢失。URL 参数恢复完整对话和游戏状态。</p>
+        </div>
 
       <div class="feature-card">
         <div class="feature-icon">🔄</div>
@@ -1117,13 +1143,13 @@ footer {
       <div class="arch-card">
         <span class="arch-tag teal">WORKSPACE</span>
         <h4>会话隔离</h4>
-        <p>每次会话拥有独立工作区，路径安全验证防止越权访问。Agent 通过 6 种工具（读/写/编辑/列表/构建/报错）与工作区交互。</p>
+        <p>每次会话拥有独立工作区，路径安全验证防止越权访问。Agent 通过 10 个工具（读/写/编辑/列表/grep搜索/构建/技能加载/todo计划/报错/子代理委托）与工作区交互。</p>
       </div>
 
       <div class="arch-card">
         <span class="arch-tag amber">PROVIDER</span>
-        <h4>模型扩展</h4>
-        <p>基于 OpenAI 兼容 SDK，现支持 DeepSeek。工厂模式设计预留了 Claude、OpenAI 等扩展接口，可轻松接入更多模型。</p>
+        <h4>模型扩展与容错</h4>
+        <p>基于 OpenAI 兼容 SDK，现支持 DeepSeek（v4-pro 主模型 + v4-flash 备用）。工厂模式预留 Claude、OpenAI 等扩展接口，内置 fallback 自动切换。</p>
       </div>
     </div>
   </div>
