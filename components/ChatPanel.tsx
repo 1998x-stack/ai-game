@@ -1,11 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Settings, Plus, Loader2, ChevronDown, ChevronRight, Copy, Check, AlertCircle } from 'lucide-react';
+import { Send, Settings, Plus, Loader2, ChevronDown, ChevronRight, Copy, Check, AlertCircle, CheckCircle2, Circle } from 'lucide-react';
 
 export interface ToolCall {
   name: string;
   arguments: Record<string, unknown>;
+}
+
+export interface TodoUpdate {
+  tasks: Array<{ task: string; status: 'pending' | 'done' }>;
+  done: number;
+  pending: number;
+  next?: string;
 }
 
 export interface ChatMessage {
@@ -14,6 +21,7 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
   buildResult?: boolean;
   reasoningContent?: string;
+  todoUpdate?: TodoUpdate;
 }
 
 interface Props {
@@ -421,6 +429,11 @@ export default function ChatPanel({
                         🎮 Game ready! Play on the right →
                       </div>
                     )}
+
+                    {/* Todo progress */}
+                    {msg.todoUpdate && (
+                      <TodoCard update={msg.todoUpdate} />
+                    )}
                   </div>
                   )}
                 </div>
@@ -604,6 +617,47 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         </button>
       </div>
+    </div>
+  );
+}
+
+function TodoCard({ update }: { update: { tasks: Array<{ task: string; status: 'pending' | 'done' }>; done: number; pending: number; next?: string } }) {
+  const total = update.done + update.pending;
+  const pct = total > 0 ? Math.round((update.done / total) * 100) : 0;
+
+  return (
+    <div className="mt-3 rounded-lg bg-panel-bg-deep border border-white/5 overflow-hidden">
+      <div className="px-3 py-2 flex items-center gap-2 border-b border-white/5">
+        <span className="text-xs font-semibold text-panel-text">Game Plan</span>
+        <span className="text-[11px] text-panel-muted ml-auto">
+          {update.done}/{total} done
+        </span>
+      </div>
+      <div className="h-1 bg-white/5">
+        <div
+          className="h-full bg-emerald-500/60 transition-all duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="px-3 py-1.5 space-y-0.5 max-h-48 overflow-y-auto">
+        {update.tasks.map((t, i) => (
+          <div key={i} className="flex items-start gap-2 text-xs leading-relaxed">
+            {t.status === 'done' ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+            ) : (
+              <Circle className="w-3.5 h-3.5 text-panel-muted/40 mt-0.5 shrink-0" />
+            )}
+            <span className={t.status === 'done' ? 'text-panel-muted/60 line-through' : 'text-panel-text/90'}>
+              {t.task}
+            </span>
+          </div>
+        ))}
+      </div>
+      {update.next && (
+        <div className="px-3 py-1.5 border-t border-white/5 text-[11px] text-panel-accent/80">
+          Next: {update.next}
+        </div>
+      )}
     </div>
   );
 }

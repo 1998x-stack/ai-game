@@ -60,7 +60,14 @@ export type StreamEvent =
   | { type: 'tool_result'; name: string; result: string; error?: string }
   | { type: 'build_result'; previewUrl: string; success: boolean }
   | { type: 'error'; message: string }
-  | { type: 'done' };
+  | { type: 'done' }
+  | {
+      type: 'todo_update';
+      tasks: Array<{ task: string; status: 'pending' | 'done' }>;
+      done: number;
+      pending: number;
+      next?: string;
+    };
 
 export interface AgentSession {
   sendMessage(content: string, signal?: AbortSignal): Promise<AgentResponse>;

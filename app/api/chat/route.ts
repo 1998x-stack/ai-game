@@ -11,6 +11,25 @@ const UUID_RE =
 const MAX_MESSAGE_LENGTH = 50000;
 const ALLOWED_PROVIDERS = new Set(['deepseek', 'openai', 'claude']);
 
+function parseTodoMd(content: string): Array<{
+  task: string;
+  status: 'pending' | 'done';
+}> {
+  const tasks: Array<{ task: string; status: 'pending' | 'done' }> = [];
+  for (const line of content.split('\n')) {
+    const doneMatch = line.match(/^-\s*\[x\]\s+(.+)/i);
+    if (doneMatch) {
+      tasks.push({ task: doneMatch[1].trim(), status: 'done' });
+      continue;
+    }
+    const pendingMatch = line.match(/^-\s*\[\s*\]\s+(.+)/);
+    if (pendingMatch) {
+      tasks.push({ task: pendingMatch[1].trim(), status: 'pending' });
+    }
+  }
+  return tasks;
+}
+
 interface ChatRequest {
   sessionId: string;
   message: string;
@@ -31,14 +50,42 @@ async function handleStreamingResponse(
 ): Promise<Response> {
   const encoder = new TextEncoder();
 
+  const trySendTodoUpdate = async () => {
+    const workspace = getWorkspace(sessionId);
+    if (!workspace) return;
+    const todoPath = path.join(workspace.workspacePath, 'todo.md');
+    try {
+      await fs.access(todoPath);
+      const content = await fs.readFile(todoPath, 'utf-8');
+      const tasks = parseTodoMd(content);
+      if (tasks.length > 0) {
+        const done = tasks.filter((t) => t.status === 'done').length;
+        const pending = tasks.filter((t) => t.status === 'pending').length;
+        const next = tasks.find((t) => t.status === 'pending');
+        return {
+          type: 'todo_update' as const,
+          tasks,
+          done,
+          pending,
+          next: next?.task,
+        };
+      }
+    } catch {
+      // todo.md not found or unreadable — skip
+    }
+    return null;
+  };
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: Record<string, unknown>) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
       };
 
       try {
-        await agent.sendMessageStream(message, (event) => {
+        await agent.sendMessageStream(message, async (event) => {
           if (event.type === 'tool_result' && event.name === 'build_game') {
             const workspace = getWorkspace(sessionId);
             if (workspace) {
@@ -64,6 +111,21 @@ async function handleStreamingResponse(
                 });
             }
           }
+
+          // Emit todo_update after write_todo or edit_file on todo.md
+          if (
+            event.type === 'tool_result' &&
+            (event.name === 'write_todo' ||
+              (event.name === 'edit_file' &&
+                typeof event.result === 'string' &&
+                event.result.includes('todo.md')))
+          ) {
+            send(event);
+            const todoEvent = await trySendTodoUpdate();
+            if (todoEvent) send(todoEvent);
+            return;
+          }
+
           send(event);
         });
         appendToJsonl(sessionId, agent.getHistory());

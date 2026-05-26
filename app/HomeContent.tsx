@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import SettingsModal, { type AppSettings } from '@/components/SettingsModal';
 import ErrorConsole, { type GameError } from '@/components/ErrorConsole';
-import ChatPanel, { type ChatMessage } from '@/components/ChatPanel';
+import ChatPanel, { type ChatMessage, type TodoUpdate } from '@/components/ChatPanel';
 import GamePreview from '@/components/GamePreview';
 import { Loader2 } from 'lucide-react';
 
@@ -192,6 +192,14 @@ export default function HomeContent() {
                   }
                   // fall through to update buildResult
                   agentMsg.buildResult = event.success;
+                  break;
+                case 'todo_update':
+                  agentMsg.todoUpdate = {
+                    tasks: event.tasks,
+                    done: event.done,
+                    pending: event.pending,
+                    next: event.next,
+                  } as TodoUpdate;
                   break;
                 case 'error':
                   streamedContent += `\nError: ${event.message}`;
