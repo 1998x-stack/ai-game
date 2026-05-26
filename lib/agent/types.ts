@@ -6,6 +6,7 @@ export interface AgentConfig {
   maxIterations?: number;
   toolTimeout?: number;
   fallbackModel?: string;
+  signal?: AbortSignal;
 }
 
 export interface ToolDefinition {

@@ -481,83 +481,26 @@ const MAX_SUBAGENTS = CONFIG.subagent.maxConcurrent;
 const SUBAGENT_MAX_ITERATIONS = CONFIG.subagent.maxIterations;
 const subagentCounters = new Map<string, number>();
 
-const SUBAGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'read_file',
-      description: 'Read file contents. Use offset and limit for large files (line numbers 1-based).',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'File path relative to workspace root' },
-          offset: { type: 'number', description: 'Line number to start from (1-based, default: 1)' },
-          limit: { type: 'number', description: 'Max lines to read (default: all)' },
-        },
-        required: ['path'],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'write_file',
-      description: 'Write or overwrite a file. Creates parent directories if needed.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'File path relative to workspace root' },
-          content: { type: 'string', description: 'Full content to write to the file' },
-        },
-        required: ['path', 'content'],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'grep_file',
-      description: 'Search for a regex pattern in files. If path is a directory, searches recursively (skips output/ and node_modules). Returns matching lines with file path and line number.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'File or directory to search' },
-          pattern: { type: 'string', description: 'JavaScript regex pattern (e.g. "export function", "class GameLoop")' },
-        },
-        required: ['path', 'pattern'],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'list_directory',
-      description: 'List files and directories at the given path.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Directory path relative to workspace root' },
-        },
-        required: ['path'],
-        additionalProperties: false,
-      },
-    },
-  },
-];
-
 const SUBAGENT_SYSTEM_PROMPT =
-  'You are a low-signal-to-noise research subagent. Your job is to gather information efficiently using read_file, grep_file, list_directory, and write_file. ' +
-  'Read files, search for patterns, and compile findings into a concise summary. ' +
-  'CRITICAL RULES:\n' +
-  '- Read files only when you need NEW information — never re-read files you already have content from.\n' +
-  '- Use grep_file for pattern searches instead of reading entire files when possible.\n' +
-  '- Write intermediate findings to a file if the output is large, so the main agent can read it later.\n' +
-  '- Do NOT create games, build games, modify todo lists, or delegate further subagents.\n' +
-  '- Do NOT make design decisions or architectural judgments — just report facts.\n' +
-  '- Provide a single concise summary as your final response. Include file paths and line numbers for key findings.';
+  'You are a focused research subagent. Gather information using read_file, grep_file, list_directory, and write_file. ' +
+  'Be thorough but efficient — prefer targeted searches over broad reads.\n' +
+  '\n' +
+  'TOOL GUIDANCE:\n' +
+  '- list_directory: Use FIRST to understand structure before reading files.\n' +
+  '- grep_file: Use for pattern searches across files. Faster than reading entire files.\n' +
+  '- read_file: Use when you know the exact file to read. Include offset/limit for large files.\n' +
+  '- write_file: Use ONLY to cache large intermediate findings for the main agent.\n' +
+  '\n' +
+  'RULES:\n' +
+  '- Never re-read files you already have content from.\n' +
+  '- Never create games, build games, modify todos, or delegate subagents.\n' +
+  '- Never make design decisions — just report facts.\n' +
+  '\n' +
+  'OUTPUT FORMAT — wrap every response in:\n' +
+  '## Summary\n<1-2 sentence overview>\n' +
+  '## Key Findings\n- **path/to/file L42-L55**: <finding>\n' +
+  '## Open Questions (if any)\n- <question>\n' +
+  'Keep the response under 500 words. Skip the Details section if nothing to add.';
 
 async function delegateSubagentHandler(
   args: Record<string, unknown>,
@@ -595,16 +538,25 @@ async function delegateSubagentHandler(
     const subagentModel = config.fallbackModel || CONFIG.providers.deepseek.fallbackModel;
 
     for (let iteration = 0; iteration < SUBAGENT_MAX_ITERATIONS; iteration++) {
-      let response: OpenAI.Chat.Completions.ChatCompletion;
-      try {
-        response = await client.chat.completions.create({
+      // Respect parent agent cancellation
+      if (config.signal?.aborted) {
+        return '(subagent cancelled)';
+      }
+
+      const subagentTimeout = config.toolTimeout || CONFIG.agent.toolTimeoutMs;
+      const response = await Promise.race([
+        client.chat.completions.create({
           model: subagentModel,
           messages,
           tools: getOpenAIToolsFiltered('subagent'),
-        });
-      } catch (primaryErr) {
-        throw primaryErr;
-      }
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Subagent API call timed out after ${subagentTimeout}ms`)),
+            subagentTimeout,
+          ),
+        ),
+      ]);
 
       const choice = response.choices[0];
       const msg = choice.message;

@@ -1248,6 +1248,42 @@ describe('delegate_subagent handler', () => {
     expect(result).toContain('Subagent error');
     expect(mockChatCreate).toHaveBeenCalledTimes(1);
   });
+
+  // -- Timeout & abort --------------------------------------------------------
+
+  it('returns cancellation when signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const config: AgentConfig = {
+      ...TEST_AGENT_CONFIG,
+      fallbackModel: 'deepseek-v4-flash',
+      signal: controller.signal,
+    };
+    const result = await handler(
+      { instruction: 'research X' },
+      '/tmp/test-workspace',
+      config,
+    );
+    expect(result).toBe('(subagent cancelled)');
+    expect(mockChatCreate).not.toHaveBeenCalled();
+  });
+
+  it('times out when subagent API call hangs', async () => {
+    // Never-resolving promise simulates a hung API call
+    mockChatCreate.mockReturnValue(new Promise(() => {}));
+    const config: AgentConfig = {
+      ...TEST_AGENT_CONFIG,
+      fallbackModel: 'deepseek-v4-flash',
+      toolTimeout: 100, // 100ms timeout for fast test
+    };
+    const result = await handler(
+      { instruction: 'research X' },
+      '/tmp/test-workspace',
+      config,
+    );
+    expect(result).toContain('Subagent error');
+    expect(result).toContain('timed out');
+  });
 });
 
 // ===========================================================================
