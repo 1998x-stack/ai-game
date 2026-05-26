@@ -9,6 +9,7 @@
 | [构建流程](./build-pipeline.md) | scripts + assets → 单文件 HTML、脚本排序、模块化处理 |
 | [脚手架系统](./scaffold-system.md) | 知识库结构、Gotchas、模板、Utils 扩展 |
 | [技能系统](./skills-system.md) | Skills 目录、YAML 元数据、load_skills 工具、经验飞轮 |
+| [工具系统分析](./tool-analysis.md) | 10 个工具详解、子代理系统、路径安全、扩展指南 |
 | [API 接口](./api-reference.md) | /api/chat、/api/build、/api/preview、/api/session |
 | [前端设计](./frontend-design.md) | 组件架构、SSR 策略、设计系统、Markdown 渲染 |
 | [部署指南](./deployment.md) | 本地开发、生产部署、GitHub Pages、环境变量 |

@@ -9,7 +9,7 @@ Agent SDK 是 AI Game Studio 的核心引擎，负责将用户的自然语言请
 ```
 lib/agent/
 ├── types.ts        # 类型定义
-├── tools.ts        # 工具定义 (6 个工具)
+├── tools.ts        # 工具定义 (10 个工具)
 ├── factory.ts      # Provider 工厂
 ├── deepseek.ts     # DeepSeek 适配器
 └── index.ts        # 统一导出
@@ -42,21 +42,26 @@ type StreamEvent =
   | { type: 'done' }                                // 流程结束
 ```
 
-## 工具系统 (6 个工具)
+## 工具系统 (10 个工具)
 
 | 工具 | 参数 | 用途 |
 |------|------|------|
-| `read_file` | `path` | 读取工作区内的文件 |
-| `write_file` | `path`, `content` | 写入/覆盖文件 |
-| `edit_file` | `path`, `old_str`, `new_str` | 替换文件中的文本 |
-| `list_directory` | `path` | 列出目录内容 |
-| `build_game` | *(无)* | 触发构建打包 |
-| `load_skills` | *(无)* | 扫描并加载可用技能 |
+| `read_file` | `path`, `offset`, `limit` | 读取文件 (默认2000行限制) |
+| `write_file` | `path`, `content`, `overwrite` | 写入文件 (默认禁止覆盖) |
+| `edit_file` | `path`, `old_str`, `new_str` | 替换文本 (多重匹配检测+行号) |
+| `list_directory` | `path` | 列出目录 (代码级确定性格式) |
+| `grep_file` | `path`, `pattern`, `context` | ripgrep 搜索 (带 JS fallback) |
+| `build_game` | *(无)* | 触发构建打包 (BUILD SUCCESS/FAILED/CRASHED) |
+| `load_skills` | *(无)* | 加载技能 (含内置 skill-creator) |
+| `write_todo` | `tasks[]` | JSON 任务数组 → Markdown 清单 |
+| `set_error` | `message` | 报告不可恢复的错误 |
+| `delegate_subagent` | `instruction` | 委托低信噪比任务到子代理 (最多3并发) |
 
-所有文件操作工具的路径都经过 `validatePath()` 校验 — 三层防御：
+所有文件操作工具的路径都经过 `validatePath()` 校验 — 四层防御：
 1. 拒绝包含 `..` 的路径
-2. 检查解析后路径在工作区根目录内（使用 `path.sep` 边界检查）
-3. 通过 `realpathSync` 解析符号链接
+2. 验证工作区根路径在 `user_space/` 下
+3. 检查解析后路径在工作区根目录内（使用 `path.sep` 边界检查）
+4. 通过 `realpathSync` 解析符号链接
 
 ## Agent 循环
 

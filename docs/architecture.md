@@ -31,7 +31,7 @@
 │  │ - 运行时错误展示         │ │  │ Agent SDK               │  │
 │  │ - 自动展开               │ │  │ - 工厂模式              │  │
 │  └─────────────────────────┘ │  │ - DeepSeek 适配器        │  │
-└──────────────────────────────┘  │ - 6 个工具 (file+build)  │  │
+└──────────────────────────────┘  │ - 10 个工具  │  │
                                   │ - 流式事件 (7 种类型)    │  │
                                   └────────────┬────────────┘  │
                                                │                │
@@ -76,7 +76,7 @@ Agent Loop (最多 10 轮):
   每次迭代:
   a. 调用 DeepSeek API (带 tools 定义)
   b. 解析响应 → 提取 reasoning_content + tool_calls
-  c. 执行工具 (read_file / write_file / edit_file / build_game / set_error)
+   c. 执行工具 (read_file / write_file / edit_file / list_directory / grep_file / build_game / load_skills / write_todo / delegate_subagent)
   d. 发送 SSE 事件 (message, reasoning, tool_call, tool_result, build_result)
   e. 将工具结果发回 API, 继续循环
   f. 无工具调用时退出

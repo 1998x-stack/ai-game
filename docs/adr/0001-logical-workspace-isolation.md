@@ -31,7 +31,7 @@ We implement **logical isolation only** for v1: string-based path validation tha
 
 ## Consequences
 
-- The `validatePath()` function in `lib/agent/deepseek.ts` is the sole security boundary for file access
+- The `validatePath()` function in `lib/agent/tools.ts` is the sole security boundary for file access
 - `agent.md` constraints serve as a second layer but are advisory (the LLM can ignore them)
 - Multi-tenant production deployment will require containerization before going live
 - Path validation is adequate for a local development tool where the user trusts their own agent
