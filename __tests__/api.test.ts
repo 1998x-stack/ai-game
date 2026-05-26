@@ -104,6 +104,10 @@ vi.mock('child_process', () => ({
   execSync: vi.fn(),
 }));
 
+vi.mock('playwright', () => ({
+  chromium: { launch: vi.fn() },
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (static — fine because vi.mock is hoisted)
 // ---------------------------------------------------------------------------
@@ -120,6 +124,7 @@ import { buildGame } from '@/lib/build/packager';
 import fsp from 'fs/promises';
 import fs from 'fs';
 import OpenAI from 'openai';
+import { chromium } from 'playwright';
 import { toolRegistry } from '@/lib/agent/tools';
 import type { AgentConfig } from '@/lib/agent/types';
 
@@ -1560,5 +1565,121 @@ describe('validatePath', () => {
 
     const result = await handler({ path: 'test.js' }, goodRoot);
     expect(result).toBeDefined();
+  });
+});
+
+// ===========================================================================
+// GAME RUNTIME HANDLER
+// ===========================================================================
+
+describe('game_runtime handler', () => {
+  let handler: ReturnType<typeof getHandler>;
+  let mockPage: Record<string, ReturnType<typeof vi.fn>>;
+
+  beforeEach(() => {
+    handler = getHandler('game_runtime');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      '<!DOCTYPE html><html><canvas id="gameCanvas"></canvas></html>',
+    );
+
+    // Default OpenAI mock for game_runtime (creates its own client)
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: {
+          completions: {
+            create: vi.fn().mockResolvedValue({
+              choices: [{ message: { content: 'ArrowUp' } }],
+            }),
+          },
+        },
+      };
+    } as any);
+
+    mockPage = {
+      setContent: vi.fn().mockResolvedValue(undefined),
+      evaluate: vi.fn().mockResolvedValue(undefined),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined),
+      keyboard: {
+        press: vi.fn().mockResolvedValue(undefined),
+      },
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockBrowser = {
+      newPage: vi.fn().mockResolvedValue(mockPage),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.mocked(chromium.launch).mockResolvedValue(mockBrowser as any);
+  });
+
+  it('returns error when config is missing', async () => {
+    const result = await handler({}, '/tmp/test');
+    expect(result).toContain('requires agent configuration');
+  });
+
+  it('returns error when no built game exists', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const result = await handler({}, '/tmp/test', TEST_AGENT_CONFIG);
+    expect(result).toContain('No built game found');
+  });
+
+  it('runs game test loop and returns report', async () => {
+    // Mock state extraction: game running, then game over
+    mockPage.evaluate
+      .mockResolvedValueOnce(undefined) // inject script
+      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '0' }) // step 1
+      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '10' }) // step 2
+      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '10', gameOver: 'true' }) // step 3
+      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '10', gameOver: 'true' }); // final
+
+    // Mock OpenAI calls for actions
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: 'ArrowUp' } }],
+      })
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: 'ArrowRight' } }],
+      });
+
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    } as any);
+
+    const result = await handler(
+      { maxSteps: 10, fps: 5 },
+      '/tmp/test',
+      TEST_AGENT_CONFIG,
+    );
+
+    expect(result).toContain('GAME RUNTIME TEST REPORT');
+    expect(result).toContain('ArrowUp');
+    expect(result).toContain('ArrowRight');
+    expect(result).toContain('Game over detected');
+  });
+
+  it('handles browser crash gracefully', async () => {
+    vi.mocked(chromium.launch).mockRejectedValue(new Error('Browser crash'));
+
+    const result = await handler({}, '/tmp/test', TEST_AGENT_CONFIG);
+    expect(result).toContain('RUNTIME ERROR');
+    expect(result).toContain('Browser crash');
+  });
+
+  it('detects zero canvas dimensions', async () => {
+    mockPage.evaluate
+      .mockResolvedValueOnce(undefined) // inject
+      .mockResolvedValueOnce({ canvasWidth: 0, canvasHeight: 0, score: '0' }) // step 1
+      .mockResolvedValueOnce({ canvasWidth: 0, canvasHeight: 0, score: '0' }); // final
+
+    const result = await handler(
+      { maxSteps: 1, fps: 5 },
+      '/tmp/test',
+      TEST_AGENT_CONFIG,
+    );
+
+    expect(result).toContain('zero dimensions');
   });
 });

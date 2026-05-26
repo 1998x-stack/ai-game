@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import OpenAI from 'openai';
+import { chromium } from 'playwright';
 import { AgentConfig, ToolDefinition, ToolHandler } from './types';
 import { buildGame } from '@/lib/build/packager';
 
@@ -159,6 +160,20 @@ const delegateSubagentDef: ToolDefinition = {
       instruction: { type: 'string', description: 'Concise research instruction. Be specific about what to find and where. Example: "Read docs/gotchas.md, docs/game-dev-guide.md, and templates/snake/game.js. Summarize: (1) key gotchas to avoid, (2) game loop pattern used in snake, (3) recommended canvas setup approach."' },
     },
     required: ['instruction'],
+    additionalProperties: false,
+  },
+};
+
+const gameRuntimeDef: ToolDefinition = {
+  name: 'game_runtime',
+  description: 'Run the built game in a headless browser and use the fallback model (deepseek-v4-flash) to play it for edge-case testing. Loads output/index.html, extracts game state, sends it to the model for action decisions at a controlled FPS, and returns a test report. Use AFTER build_game succeeds. Tests boundary collisions, self-collision, game-over triggers, and other runtime behaviors. Do NOT use on unbuilt or broken games.',
+  parameters: {
+    type: 'object',
+    properties: {
+      maxSteps: { type: 'number', description: 'Maximum interaction steps (default: 15)' },
+      fps: { type: 'number', description: 'Game speed in FPS. Lower = more time for model to decide each action (default: 5)' },
+    },
+    required: [],
     additionalProperties: false,
   },
 };
@@ -661,6 +676,211 @@ async function delegateSubagentHandler(
   }
 }
 
+async function gameRuntimeHandler(
+  args: Record<string, unknown>,
+  root: string,
+  config?: AgentConfig,
+): Promise<string> {
+  if (!config) {
+    return 'Error: game_runtime requires agent configuration.';
+  }
+
+  const maxSteps =
+    typeof args.maxSteps === 'number' ? Math.floor(args.maxSteps) : 15;
+  const fps = typeof args.fps === 'number' ? Math.floor(args.fps) : 5;
+  const stepDelay = Math.round(1000 / fps);
+
+  const outputPath = path.join(root, 'output', 'index.html');
+  if (!fs.existsSync(outputPath)) {
+    return 'Error: No built game found. Run build_game first to generate output/index.html.';
+  }
+
+  const html = fs.readFileSync(outputPath, 'utf-8');
+  const fallbackModel = config.fallbackModel || 'deepseek-v4-flash';
+
+  const testReport: string[] = [];
+  const issues: string[] = [];
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.setContent(html);
+
+    // Inject state extraction helper
+    await page.evaluate(() => {
+      (window as any).__extractGameState = () => {
+        const canvas = document.getElementById(
+          'gameCanvas',
+        ) as HTMLCanvasElement | null;
+        const state: Record<string, unknown> = {
+          canvasWidth: canvas?.width || 0,
+          canvasHeight: canvas?.height || 0,
+        };
+        // Try to extract common game state variables
+        const w = window as any;
+        for (const key of [
+          'score',
+          'gameOver',
+          'gameover',
+          'isGameOver',
+          'snake',
+          'food',
+          'direction',
+          'ball',
+          'paddle',
+          'bricks',
+          'level',
+          'lives',
+          'player',
+          'enemies',
+          'state',
+        ]) {
+          try {
+            const val = w[key];
+            if (val !== undefined && val !== null) {
+              if (typeof val === 'object') {
+                state[key] = JSON.stringify(val).slice(0, 200);
+              } else {
+                state[key] = String(val).slice(0, 200);
+              }
+            }
+          } catch {
+            /* skip inaccessible */
+          }
+        }
+        return state;
+      };
+    });
+
+    // Wait for game to initialize
+    await page.waitForTimeout(1000);
+
+    const client = new OpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseUrl || 'https://api.deepseek.com',
+    });
+
+    for (let step = 0; step < maxSteps; step++) {
+      const state = await page.evaluate(() =>
+        (window as any).__extractGameState(),
+      );
+
+      const stateText = Object.entries(state)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n');
+
+      // Check for game-over or edge conditions
+      if (
+        state.gameOver === 'true' ||
+        state.gameover === 'true' ||
+        state.isGameOver === 'true'
+      ) {
+        testReport.push(
+          `Step ${step + 1}: Game over detected. State: ${JSON.stringify(state)}`,
+        );
+        break;
+      }
+
+      // Ask model for next action
+      let action = 'none';
+      try {
+        const response = await client.chat.completions.create({
+          model: fallbackModel,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a game tester. Given the current game state, output ONLY a single keyboard key name (e.g., ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space) that would be the best next action for the game. No explanation, just the key name.',
+            },
+            {
+              role: 'user',
+              content: `Game state:\n${stateText}\n\nNext action (key name only):`,
+            },
+          ],
+          max_tokens: 10,
+          temperature: 0.3,
+        });
+
+        action = (response.choices[0]?.message?.content || 'none').trim();
+        // Clean up any extra text
+        action = action.replace(/[^a-zA-Z]/g, '');
+      } catch {
+        testReport.push(
+          `Step ${step + 1}: Model API call failed, stopping test.`,
+        );
+        break;
+      }
+
+      if (action === 'none' || !action) {
+        testReport.push(
+          `Step ${step + 1}: Model returned no action, stopping.`,
+        );
+        break;
+      }
+
+      // Execute action
+      await page.keyboard.press(action);
+      testReport.push(
+        `Step ${step + 1}: State keys=[${Object.keys(state).join(',')}] | Action=${action}`,
+      );
+
+      await page.waitForTimeout(stepDelay);
+    }
+
+    // Final analysis
+    const finalState = await page.evaluate(() =>
+      (window as any).__extractGameState(),
+    );
+
+    if (
+      finalState.gameOver !== 'true' &&
+      finalState.gameover !== 'true' &&
+      finalState.isGameOver !== 'true'
+    ) {
+      testReport.push(
+        `Game did not trigger game-over after ${maxSteps} steps. This may be normal for some games.`,
+      );
+    }
+
+    // Check for edge-case issues
+    if (
+      finalState.canvasHeight === '0' ||
+      finalState.canvasHeight === 0 ||
+      finalState.canvasWidth === '0' ||
+      finalState.canvasWidth === 0
+    ) {
+      issues.push('Canvas has zero dimensions — check canvas.width/height setup.');
+    }
+
+    if (finalState.score === '0' || finalState.score === 0) {
+      issues.push('Score remained 0 throughout the test — verify scoring logic.');
+    }
+
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return `RUNTIME ERROR: ${msg}. The game may have crashed during testing.`;
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+
+  const report = [
+    `GAME RUNTIME TEST REPORT (${testReport.length} steps, ${fps} FPS)`,
+    '',
+    '--- Test Log ---',
+    ...testReport,
+    '',
+    issues.length > 0 ? '--- Issues Found ---' : '--- Issues Found ---\nNone detected.',
+    ...issues,
+    '',
+    issues.length > 0
+      ? 'Review the issues above and fix the game code. Then run build_game again to apply fixes.'
+      : 'No runtime issues detected. The game appears to handle basic interactions correctly.',
+  ].join('\n');
+
+  return report;
+}
+
 export const toolRegistry: ToolHandler[] = [
   { definition: readFileDef, handler: readFileHandler },
   { definition: writeFileDef, handler: writeFileHandler },
@@ -672,6 +892,7 @@ export const toolRegistry: ToolHandler[] = [
   { definition: writeTodoDef, handler: writeTodoHandler },
   { definition: setErrorDef, handler: setErrorHandler },
   { definition: delegateSubagentDef, handler: delegateSubagentHandler },
+  { definition: gameRuntimeDef, handler: gameRuntimeHandler },
 ];
 
 export const tools: ToolDefinition[] = toolRegistry.map(t => t.definition);
