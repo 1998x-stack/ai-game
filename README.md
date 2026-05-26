@@ -13,6 +13,10 @@
 </p>
 
 <p align="center">
+  <img src="assets/ai-game-screenshot.png" alt="AI Game Studio Screenshot" width="100%" style="border-radius: 12px; box-shadow: 0 0 60px rgba(233, 69, 96, 0.15);" />
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square" alt="Build">
   <img src="https://img.shields.io/badge/tests-24%20passing-brightgreen?style=flat-square" alt="Tests">
   <img src="https://img.shields.io/badge/coverage-0%25-red?style=flat-square" alt="Coverage">
