@@ -21,6 +21,10 @@ user_space/{sessionId}/
                     Do NOT write to this directory manually.
   docs/           — Scaffold documentation (game-dev-guide, patterns, gotchas, ui-design)
   templates/      — Reference game implementations (snake, breakout, tetris, 2048)
+  skills/         — Reusable skill files for specific game domains (EXTENSIBLE — see below)
+    README.md     — Skill system overview
+    skill-creator.md — Template for creating new skills
+    examples/     — Example skills (pixel-art, sound-effects, etc.)
   lib/
     utils.js      — Utility library source (pre-loaded, EXTENSIBLE — see below)
     index.md      — API reference for all utility functions and classes
@@ -149,6 +153,10 @@ user_space/{sessionId}/
 
 ## Development Workflow
 
+  0. Call load_skills() to discover available skills — it returns name,
+     description, and trigger keywords for each skill. Read the full .md file
+     for any skills whose triggers match the user's request.
+
   1. Read scripts/utils.js to understand available utilities.
   2. Read lib/index.md for the complete utility API reference.
   3. Read templates/ for a reference implementation matching your game genre.
@@ -202,6 +210,32 @@ user_space/{sessionId}/
   - "TextBaseline 'middle' centers on the glyph's middle, not the string"
   - "for...in enumerates prototype properties — use for...of for arrays"
   - "ctx.measureText().width doesn't include padding — add manually"
+
+## Creating Skills
+
+  Skills are reusable instruction files in `skills/` that capture domain-specific
+  knowledge for game generation. Read relevant skills before starting a game.
+
+  Available skills (in `skills/examples/`):
+  - `pixel-art-games.md` — pixel art rendering, tile-based grids, integer positions
+  - `game-sound-effects.md` — SoundManager usage, beep synthesis, audio patterns
+
+  You may CREATE new skills when you discover a reusable game development pattern:
+  1. Read `skills/skill-creator.md` for the template and guidelines
+  2. Write a new `.md` file to `skills/examples/{skill-name}.md`
+  3. Follow the skill structure: When to Use, Core Patterns, Gotchas, Integration
+  4. Include concrete code examples that agents can copy
+  5. Reference relevant utils.js utilities
+
+  Good candidates for new skills:
+  - Platformer physics (gravity, jumping, ground detection)
+  - Particle systems (emitters, pooling, visual effects)
+  - Enemy AI patterns (patrol, chase, state machines)
+  - UI/score display patterns
+  - Level generation (procedural, tile-based)
+
+  Skills compound: each new skill makes future game generation better.
+  Together with utils.js and gotchas.md, this creates a growing knowledge base.
 
   A. Auto-start pattern:
     At the bottom of scripts/game.js, instantiate and start your game:
