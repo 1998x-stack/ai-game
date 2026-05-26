@@ -3,12 +3,19 @@ export interface AgentConfig {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  maxIterations?: number;
+  toolTimeout?: number;
 }
 
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+}
+
+export interface ToolHandler {
+  definition: ToolDefinition;
+  handler: (args: Record<string, unknown>, workspaceRoot: string) => Promise<string>;
 }
 
 export interface ToolCall {
@@ -36,6 +43,13 @@ export interface AgentResponse {
   message: string;
   toolCalls: ToolCall[];
   finishReason: 'stop' | 'tool_calls' | 'length';
+  usage?: TokenUsage;
+}
+
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 export type StreamEvent =
@@ -48,10 +62,11 @@ export type StreamEvent =
   | { type: 'done' };
 
 export interface AgentSession {
-  sendMessage(content: string): Promise<AgentResponse>;
+  sendMessage(content: string, signal?: AbortSignal): Promise<AgentResponse>;
   sendMessageStream(
     content: string,
     onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal,
   ): Promise<AgentResponse>;
   getHistory(): AgentMessage[];
   loadHistory(messages: AgentMessage[]): void;

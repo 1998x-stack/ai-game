@@ -1,6 +1,7 @@
 export type {
   AgentConfig,
   ToolDefinition,
+  ToolHandler,
   ToolCall,
   ToolResult,
   AgentMessage,
@@ -10,4 +11,4 @@ export type {
 } from './types';
 
 export { createAgent } from './factory';
-export { tools, getOpenAITools } from './tools';
+export { tools, getOpenAITools, toolRegistry } from './tools';

@@ -82,7 +82,7 @@ export async function copyScaffoldToWorkspace(
   await mkdir(path.join(workspacePath, 'scripts'), { recursive: true });
   await mkdir(path.join(workspacePath, 'assets'), { recursive: true });
 
-  const dirs = ['docs', 'templates', 'lib'];
+  const dirs = ['docs', 'templates', 'lib', 'skills'];
   for (const dir of dirs) {
     await cp(
       path.join(SCAFFOLD_PATH, dir),

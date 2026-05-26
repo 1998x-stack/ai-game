@@ -27,6 +27,7 @@ async function handleStreamingResponse(
   agent: AgentSession,
   message: string,
   sessionId: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const encoder = new TextEncoder();
 
@@ -138,6 +139,7 @@ export async function POST(request: Request) {
         'The HTML has no canvas width/height. YOU MUST set canvas.width and canvas.height in your JavaScript code — default is 300x150.',
         'Use setupCanvas("gameCanvas", 800, 600) from utils.js or set them manually.',
         'Files in assets/ are embedded as base64 at build time. Access them via window.__ASSETS__[filename].',
+        'Available skills in skills/examples/ — read pixel-art-games.md for retro graphics, game-sound-effects.md for audio, or create new skills for other domains.',
       ];
 
       if (gotchas) {
@@ -152,7 +154,7 @@ export async function POST(request: Request) {
       }
 
       parts.push(
-        '\n\nWhen the user asks for a game, generate the code in scripts/game.js using the patterns from the scaffold.',
+        '\n\nWhen the user asks for a game, first call the load_skills tool to discover relevant skills. For matching skills, read the full skill file. Then generate the code in scripts/game.js using the patterns from the scaffold.',
         '\n\nCRITICAL: scripts/utils.js is pre-loaded in the same module scope before game.js.',
         'All exported classes (GameLoop, InputManager, CollisionDetector, SpriteManager, Animation, SoundManager, ObjectPool, Vector2, Camera, Timer, ScreenShake, SeededRandom) and functions (randomInt, clamp, lerp, distance, angleBetween, setupCanvas) and constants (Easing) are already available — use them directly.',
         'Do NOT redeclare, re-export, or copy utility code into game.js. This causes "Identifier has already been declared" errors.',
@@ -205,10 +207,10 @@ export async function POST(request: Request) {
     }
 
     if (body.stream) {
-      return handleStreamingResponse(agent, message, sessionId);
+      return handleStreamingResponse(agent, message, sessionId, request.signal);
     }
 
-    const response = await agent.sendMessage(message);
+    const response = await agent.sendMessage(message, request.signal);
 
     const hasBuildGame = response.toolCalls.some(
       (tc) => tc.name === 'build_game',
