@@ -154,7 +154,7 @@ export async function POST(request: Request) {
       }
 
       parts.push(
-        '\n\nWhen the user asks for a game, first call the load_skills tool to discover relevant skills. For matching skills, read the full skill file. Then generate the code in scripts/game.js using the patterns from the scaffold.',
+        '\n\nWhen the user asks for a game, start by calling write_todo to create a game plan in todo.md with a checklist. Then call load_skills to discover relevant skills. For matching skills, read the full skill file. Then generate the code in scripts/game.js using the patterns from the scaffold.',
         '\n\nCRITICAL: scripts/utils.js is pre-loaded in the same module scope before game.js.',
         'All exported classes (GameLoop, InputManager, CollisionDetector, SpriteManager, Animation, SoundManager, ObjectPool, Vector2, Camera, Timer, ScreenShake, SeededRandom) and functions (randomInt, clamp, lerp, distance, angleBetween, setupCanvas) and constants (Easing) are already available — use them directly.',
         'Do NOT redeclare, re-export, or copy utility code into game.js. This causes "Identifier has already been declared" errors.',
