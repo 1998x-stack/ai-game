@@ -1,8 +1,8 @@
 # 🎮 AI Game Studio
 
-> **用自然语言创造 HTML5 游戏 — 对话即开发，所见即所得**
+> **Natural Language to Playable Games — Chat to develop, see it play instantly.**
 >
-> *Create HTML5 games through natural language — chat to develop, see it play instantly.*
+> *用自然语言创造 HTML5 游戏 — 对话即开发，所见即所得。*
 
 <p align="center">
   <img src="https://img.shields.io/github/stars/1998x-stack/ai-game?style=for-the-badge&color=e94560" alt="Stars">
@@ -10,6 +10,7 @@
   <img src="https://img.shields.io/badge/Next.js-14.2-black?style=for-the-badge&logo=next.js" alt="Next.js">
   <img src="https://img.shields.io/badge/TypeScript-5.4-3178c6?style=for-the-badge&logo=typescript" alt="TypeScript">
   <img src="https://img.shields.io/badge/DeepSeek-API-4d6bfe?style=for-the-badge" alt="DeepSeek">
+  <img src="https://img.shields.io/badge/Playwright-45ba4b?style=for-the-badge&logo=playwright" alt="Playwright">
 </p>
 
 <p align="center">
@@ -18,185 +19,217 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square" alt="Build">
-  <img src="https://img.shields.io/badge/tests-24%20passing-brightgreen?style=flat-square" alt="Tests">
-  <img src="https://img.shields.io/badge/coverage-0%25-red?style=flat-square" alt="Coverage">
+  <img src="https://img.shields.io/badge/tests-84%20passing-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/tools-11-brightgreen?style=flat-square" alt="Tools">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs">
 </p>
 
 ---
 
-## ✨ 核心特性 / Features
+## ✨ Core Capabilities
 
 <table>
 <tr>
 <td width="50%">
 
-### 💬 自然语言驱动
-用中文或英文描述你的游戏创意 — "做一个贪吃蛇游戏"、"创建一个太空射击游戏"、"Build a brick breaker"。Agent 自动理解并生成完整代码。
+### 💬 Natural Language Driven
+Describe your game in Chinese or English — *"Make a neon-styled snake game"*, *"Build a space shooter with particles"*. The agent reads scaffold documentation, studies templates, and generates optimized code.
 
-### ⚡ 实时流式生成
-Agent 逐步展示工具调用、推理过程 (`reasoning_content`) 和代码生成 — 不是黑盒，全程可见。每个文件读写、每次构建都在聊天框实时显示。
+### 🤖 Subagent Delegation
+The agent spawns up to 3 research subagents for low-signal-to-noise tasks — reading documentation, searching code patterns, gathering context — freeing the main agent for high-level game design decisions.
 
-### 🎮 即时预览
-右侧沙箱 iframe 直接运行生成的游戏。支持键盘、鼠标、触摸操作，一键全屏。游戏错误自动捕获并展示在控制台面板中。
-
-### 🔄 持续迭代
-多轮对话不断优化游戏 — "把蛇变快一点"、"加个分数计数器"、"改成霓虹风格"。Agent 修改代码、重新构建、自动预览。支持会话恢复 (`?session=` URL 参数)。
+### 🧪 Automated Testing
+`game_runtime` loads the built game in a headless Chromium browser, uses the fallback model to play it at controlled FPS, and reports edge-case issues: boundary collisions, game-over triggers, canvas sizing, score stagnation.
 
 </td>
 <td width="50%">
 
-### 🧠 知识飞轮
-脚手架包含 4 个游戏模板、20+ 条 Gotchas 规则、完整的 Canvas UI 设计指南。**Utils 和 Gotchas 可由 Agent 自主扩展** — 每次解决问题都沉淀为新工具或规则，质量随使用持续提升。
+### ⚡ Streaming Generation
+Every tool call, reasoning chain, and code output streams in real-time. The entire development process is transparent — not a black box.
 
-### 📦 自包含构建
-所有 scripts + assets → 单个 HTML 文件。无外部依赖，纯 Canvas + JavaScript。生成的游戏可以独立运行，无需服务器。
+### 🛡️ Model Resilience
+Built-in fallback mechanism: when the primary model (deepseek-v4-pro) is unavailable, the system automatically retries with the fallback (deepseek-v4-flash) — for both the main agent loop and subagent delegation.
 
-### 🔌 BYO-Key 架构
-用户自带 DeepSeek API Key，系统不存储密钥。支持 OpenAI 兼容接口，可配置自定义 endpoint 和 model。
-
-### 🌐 会话持久化
-JSONL 文件持久化存储会话历史，服务器重启不丢失。`?session={id}` URL 参数恢复完整对话 + 游戏状态。
+### 📋 Todo Visualization
+Game plans are extracted from `todo.md` and rendered as interactive progress cards in the chat — progress bar, checkbox list with completion status, and next-task indicator.
 
 </td>
 </tr>
 </table>
 
+### Additional Features
+
+| Feature | Description |
+|---|---|
+| 🎮 **Instant Preview** | Sandboxed iframe runs your game immediately. Keyboard, mouse, touch support. Fullscreen. |
+| 🔄 **Iterative Refinement** | Multi-turn conversations refine every aspect — speed, scoring, visuals, mechanics. |
+| 🧠 **Knowledge Flywheel** | 4 game templates, 20+ gotcha rules, complete Canvas UI guide. Utils and gotchas are agent-extensible. |
+| 📦 **Self-Contained Builds** | All scripts + assets → single HTML file. Zero external dependencies. Pure Canvas + JavaScript. |
+| 🔌 **BYO-Key Architecture** | Bring your own DeepSeek API key. No server-side key storage. OpenAI-compatible endpoints supported. |
+| 🌐 **Session Persistence** | JSONL file-based persistence survives server restarts. `?session={id}` restores full conversation + game state. |
+
 ---
 
-## 🚀 30 秒快速开始
+## 🚀 Quick Start
 
 ```bash
 git clone https://github.com/1998x-stack/ai-game.git
 cd ai-game
 npm install
 npm run dev
-# 打开 http://localhost:3000
-# 配置 DeepSeek API Key → 开始创造游戏
+# Open http://localhost:3000
+# Configure your DeepSeek API Key → Start creating games
 ```
 
-**前置条件**: Node.js 18+ | [DeepSeek API Key](https://platform.deepseek.com/)
+**Prerequisites**: Node.js 18+ | [DeepSeek API Key](https://platform.deepseek.com/)
 
 ---
 
-## 🏗️ 架构
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    AI Game Studio                        │
-├──────────────────────┬──────────────────────────────────┤
-│   左侧：对话面板      │       右侧：游戏预览               │
-│                      │                                   │
-│  ┌────────────────┐  │  ┌────────────────────────────┐  │
-│  │ 用户: "做一个   │  │  │                            │  │
-│  │   贪吃蛇游戏"   │──┼─▶│   ┌──────────────────┐    │  │
-│  └────────────────┘  │  │   │  🐍 Snake Game    │    │  │
-│                      │  │   │  (sandbox iframe)  │    │  │
-│  ┌────────────────┐  │  │   └──────────────────┘    │  │
-│  │ Agent: 推理中…  │  │  │                            │  │
-│  │ 📁 read_file   │◀─┼──│   Score: 42  Level: 3      │  │
-│  │ ✏️ write_file  │  │  │                            │  │
-│  │ 🔨 build_game  │  │  │   [Error Console]          │  │
-│  │ ✅ 构建成功!    │  │  └────────────────────────────┘  │
-│  └────────────────┘  │                                   │
-├──────────────────────┴──────────────────────────────────┤
-│              Agent Pipeline (DeepSeek API)               │
-│  系统提示词 → 脚手架文档 → Gotchas → 模板 → 工具调用循环   │
-│         ↓                ↓                               │
-│   scripts/game.js    build_game → output/index.html      │
-│         ↓                                                │
-│   /api/preview/{sessionId} → iframe 沙箱预览              │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        AI Game Studio                             │
+├──────────────────────┬───────────────────────────────────────────┤
+│   Chat Panel (left)  │          Game Preview (right)              │
+│                      │                                            │
+│  ┌────────────────┐  │  ┌─────────────────────────────────────┐  │
+│  │ User: "Make a  │  │  │                                     │  │
+│  │   snake game"  │──┼─▶│   ┌───────────────────────────┐    │  │
+│  └────────────────┘  │  │   │  🐍 Snake Game             │    │  │
+│                      │  │   │  (sandbox iframe)          │    │  │
+│  ┌────────────────┐  │  │   └───────────────────────────┘    │  │
+│  │ Agent:          │  │  │                                     │  │
+│  │  📁 read_file  │◀─┼──│   Score: 42  Level: 3              │  │
+│  │  ✏️ write_file │  │  │                                     │  │
+│  │  🔍 grep_file  │  │  │   [Error Console]                  │  │
+│  │  🤖 delegate   │  │  │                                     │  │
+│  │  🔨 build_game │  │  │   [Todo Card: 3/5 done]            │  │
+│  │  🧪 game_rt    │  │  └─────────────────────────────────────┘  │
+│  │  ✅ Build OK!   │  │                                            │
+│  └────────────────┘  │                                            │
+├──────────────────────┴───────────────────────────────────────────┤
+│                   Agent Pipeline (11 tools)                        │
+│   System Prompt → Scaffold Docs → Gotchas → Templates → Tool Loop  │
+│         ↓                     ↓                                    │
+│   scripts/game.js      build_game → output/index.html              │
+│         ↓                     ↓                                    │
+│   /api/preview/{id} → iframe   game_runtime → Playwright → Test    │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-### 技术栈
+### Tech Stack
 
-| 层级 | 技术 |
-|------|------|
-| 框架 | Next.js 14 (App Router) |
-| 语言 | TypeScript 5.4 |
-| 样式 | Tailwind CSS 3.4 |
-| Agent SDK | DeepSeek API (OpenAI 兼容) |
-| 游戏引擎 | 纯 HTML5 Canvas + JavaScript |
-| 沙箱 | iframe `allow-scripts` |
-| 持久化 | JSONL 文件 + 内存 Map |
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 14 (App Router) |
+| Language | TypeScript 5.4 |
+| Styling | Tailwind CSS 3.4 |
+| Agent SDK | DeepSeek API (OpenAI-compatible) |
+| Testing | Playwright (headless Chromium) |
+| Game Engine | Pure HTML5 Canvas + JavaScript |
+| Sandbox | iframe `allow-scripts` |
+| Persistence | JSONL files + in-memory Map |
+
+### Agent Tool Registry (11 tools)
+
+| Tool | Parameters | Purpose |
+|---|---|---|
+| `read_file` | `path`, `offset`, `limit` | Read files (2K-line default) |
+| `write_file` | `path`, `content`, `overwrite` | Write files (overwrite-protected) |
+| `edit_file` | `path`, `old_str`, `new_str` | Unique-match text replacement |
+| `list_directory` | `path` | List with deterministic format |
+| `grep_file` | `path`, `pattern`, `context` | ripgrep search (JS fallback) |
+| `build_game` | — | Package scripts → HTML |
+| `load_skills` | — | Discover workspace skills |
+| `write_todo` | `tasks[]` | JSON tasks → checklist |
+| `set_error` | `message` | Report unrecoverable errors |
+| `delegate_subagent` | `instruction` | Spawn research subagents (max 3) |
+| `game_runtime` | `maxSteps`, `fps` | Automated edge-case testing |
 
 ---
 
-## 📂 项目结构
+## 📂 Project Structure
 
 ```
 ai-game/
-├── app/                          # Next.js 页面 + API 路由
-│   ├── page.tsx                  # 动态导入入口 (SSR disabled)
-│   ├── HomeContent.tsx           # 分割面板布局 + 状态管理
-│   ├── layout.tsx                # 根布局
+├── app/                          # Next.js pages + API routes
+│   ├── page.tsx                  # Dynamic import entry (SSR disabled)
+│   ├── HomeContent.tsx           # Split-panel layout + state management
+│   ├── layout.tsx                # Root layout
 │   └── api/
-│       ├── chat/route.ts         # Agent 聊天 (POST, SSE 流式)
-│       ├── build/route.ts        # 手动构建 (POST)
-│       ├── preview/[id]/route.ts # 游戏预览 (GET, iframe 源)
-│       └── session/[id]/route.ts # 会话历史 (GET, JSONL 读取)
-├── components/                   # React 组件
-│   ├── ChatPanel.tsx             # 聊天面板 + Markdown 渲染
-│   ├── GamePreview.tsx           # 沙箱 iframe + 全屏
-│   ├── SettingsModal.tsx         # API Key 配置
-│   └── ErrorConsole.tsx          # 运行时错误显示
-├── lib/                          # 核心库
-│   ├── agent/                    # Agent SDK (工厂模式 + DeepSeek 适配器)
-│   ├── build/packager.ts         # scripts + assets → 单文件 HTML
-│   ├── workspace/manager.ts      # 会话隔离 + 脚手架复制
-│   ├── scaffold/reader.ts        # 脚手架文档加载器
-│   └── session-store.ts          # JSONL 持久化
-├── workspace/                    # 脚手架知识库 (Agent 的权威参考)
-│   ├── agent.md / claude.md      # Agent 系统指令
-│   ├── docs/                     # 4 份游戏开发文档
-│   │   ├── game-dev-guide.md     # Canvas 开发指南
-│   │   ├── game-patterns.md      # 架构模式
-│   │   ├── gotchas.md            # 20+ 条反模式 (可扩展)
-│   │   └── ui-design-guide.md    # Canvas UI 设计
-│   ├── templates/                # 4 个游戏模板
-│   │   ├── snake/game.js
-│   │   ├── breakout/game.js
-│   │   ├── tetris/game.js
-│   │   └── 2048/game.js
-│   └── lib/
-│       ├── utils.js              # 19 个可复用工具类/函数 (可扩展)
-│       └── index.md              # 完整 API 参考
-├── assets/                       # GitHub Pages 落地页
-└── __tests__/                    # API 测试
+│       ├── chat/route.ts         # Agent chat (POST, SSE streaming)
+│       ├── build/route.ts        # Manual build (POST)
+│       ├── preview/[id]/route.ts # Game preview (GET, iframe source)
+│       └── session/[id]/route.ts # Session history (GET, JSONL reader)
+├── components/                   # React components
+│   ├── ChatPanel.tsx             # Chat panel + Markdown + TodoCard
+│   ├── GamePreview.tsx           # Sandbox iframe + fullscreen
+│   ├── SettingsModal.tsx         # API key configuration
+│   └── ErrorConsole.tsx          # Runtime error display
+├── lib/                          # Core libraries
+│   ├── agent/                    # Agent SDK (factory + DeepSeek adapter)
+│   │   ├── types.ts              # Type definitions + StreamEvent
+│   │   ├── tools.ts              # 11 tool definitions + handlers
+│   │   ├── factory.ts            # Provider factory
+│   │   ├── deepseek.ts           # DeepSeek agent (fallback-aware)
+│   │   └── index.ts              # Barrel export
+│   ├── build/packager.ts         # scripts + assets → single HTML
+│   ├── workspace/manager.ts      # Session isolation + scaffold copy
+│   ├── scaffold/reader.ts        # Scaffold document loader
+│   └── session-store.ts          # JSONL persistence
+├── workspace/                    # Scaffold knowledge base
+│   ├── agent.md / claude.md      # Agent system instructions
+│   ├── docs/                     # 4 game development guides
+│   ├── templates/                # 4 game templates (snake, breakout, tetris, 2048)
+│   ├── lib/utils.js              # 19 reusable engine classes/functions
+│   └── skills/                   # Extensible skill system
+├── docs/                         # Project documentation
+│   ├── architecture.md           # System architecture
+│   ├── agent-sdk.md              # Agent SDK reference
+│   ├── tool-analysis.md          # Comprehensive tool analysis
+│   ├── scaffold-system.md        # Scaffold system design
+│   ├── skills-system.md          # Skill system design
+│   └── adr/                      # Architecture Decision Records
+├── assets/                       # GitHub Pages landing page
+├── __tests__/                    # 84 test cases (Vitest)
+└── CONTEXT.md                    # Domain context glossary
 ```
 
 ---
 
-## 🎯 设计哲学
+## 🎯 Design Philosophy
 
-| 原则 | 实践 |
-|------|------|
-| **脚手架优先** | Agent 生成代码前必须阅读权威文档 + Gotchas + 模板 |
-| **知识飞轮** | Utils 和 Gotchas 可由 Agent 自主扩展 — 每次解决问题都沉淀 |
-| **纯 Canvas** | 零 WebAssembly，零 Phaser，生成的游戏是独立的单个 HTML 文件 |
-| **BYO-Key** | 无服务器端密钥存储，无用户认证，API Key 仅存在于浏览器 localStorage |
-| **逻辑隔离** | 路径校验 + agent.md 约束。OS 级容器化 (v2) |
-
----
-
-## 🤝 参与贡献
-
-1. 阅读 [CONTEXT.md](./CONTEXT.md) — 理解领域模型
-2. 阅读 [DEVELOPMENT.md](./DEVELOPMENT.md) — 开发注意事项
-3. 扩展脚手架 — 在 `workspace/` 下添加新模板、Gotchas 或文档
-4. 新增 LLM Provider — 实现 `AgentSession` 接口（参考 `lib/agent/deepseek.ts`）
-
-**30+ Gotchas 已记录** — 覆盖 Canvas 尺寸、模块作用域、事件处理、文本渲染、碰撞检测等领域。
+| Principle | Practice |
+|---|---|
+| **Scaffold-First** | Agent reads authoritative docs + gotchas + templates before generating code |
+| **Knowledge Flywheel** | Utils, gotchas, and skills are agent-extensible — every solved problem becomes reusable knowledge |
+| **Pure Canvas** | Zero WebAssembly, zero game frameworks — generated games are standalone HTML files |
+| **BYO-Key** | No server-side key storage — API key lives only in browser localStorage |
+| **Defense in Depth** | Four-layer path validation: `..` rejection → `user_space/` check → boundary check → symlink resolution |
+| **Model Resilience** | Automatic failover to fallback model on API errors — main loop and subagents |
+| **Deterministic Tools** | `formatDirectoryListing()` function guarantees output format — not just prompt-constrained |
 
 ---
 
-## 📄 许可证
+## 🤝 Contributing
+
+1. Read [CONTEXT.md](./CONTEXT.md) — understand the domain model
+2. Read [DEVELOPMENT.md](./DEVELOPMENT.md) — developer gotchas and conventions
+3. Extend the scaffold — add new templates, gotchas, or skills under `workspace/`
+4. Add a new LLM provider — implement `AgentSession` interface (see `lib/agent/deepseek.ts`)
+5. Add a new tool — define + register in `lib/agent/tools.ts` (see `docs/tool-analysis.md`)
+
+**30+ gotchas documented** — covering canvas sizing, module scoping, event handling, text rendering, collision detection, and more.
+
+---
+
+## 📄 License
 
 MIT © 2024 AI Game Studio
 
 ---
 
 <p align="center">
-  <sub>Built with ❤️ using <a href="https://nextjs.org">Next.js</a> · <a href="https://platform.deepseek.com">DeepSeek</a> · <a href="https://tailwindcss.com">Tailwind CSS</a></sub>
+  <sub>Built with ❤️ using <a href="https://nextjs.org">Next.js</a> · <a href="https://platform.deepseek.com">DeepSeek</a> · <a href="https://tailwindcss.com">Tailwind CSS</a> · <a href="https://playwright.dev">Playwright</a></sub>
 </p>

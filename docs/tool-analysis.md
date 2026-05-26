@@ -4,7 +4,7 @@
 
 AI Game Studio 的工具系统是 Agent 与工作区交互的唯一通道。Agent 通过函数调用 (function calling) 机制使用工具来读取文档、编写代码、搜索文件、构建游戏以及委托子任务。所有工具定义在 `lib/agent/tools.ts` 中，通过 `toolRegistry` 统一注册。
 
-**当前工具数量**: 10 个（9 个主工具 + 1 个子代理工具）
+**当前工具数量**: 11 个（10 个主工具 + 1 个子代理工具）
 
 ## 架构
 
@@ -157,6 +157,18 @@ DeepSeekAgent.agentLoop(onEvent)
 | 子代理工具 | `read_file`, `write_file`, `grep_file`, `list_directory` |
 | 最大迭代 | 5 轮 API 调用 |
 
+### 11. game_runtime
+
+在无头 Chromium 浏览器中运行已构建的游戏，使用 fallback 模型（deepseek-v4-flash）在受控 FPS 下与游戏交互，进行边缘测试。注入状态提取脚本，将游戏状态发送给模型决策，执行返回的按键操作，检测边界碰撞、游戏结束触发、Canvas 尺寸等问题。
+
+| 属性 | 值 |
+|------|-----|
+| 参数 | `maxSteps` (选填, 默认 15), `fps` (选填, 默认 5) |
+| 处理函数 | 启动 Playwright → 注入状态提取 → 模型交互循环 → 返回测试报告 |
+| 依赖 | Playwright + Chromium (headless) |
+| 返回 | 结构化测试报告: 步骤日志 + 发现的问题 |
+| 检测项 | 游戏结束触发、零尺寸 Canvas、分数停滞、浏览器崩溃 |
+
 ## 安全性：路径校验
 
 所有文件操作工具（`read_file`, `write_file`, `edit_file`, `list_directory`, `grep_file`）都通过 `validatePath()` 进行四层防御：
@@ -294,7 +306,7 @@ type ToolHandlerFn = (
 
 ## 测试覆盖
 
-工具系统测试位于 `__tests__/api.test.ts`（75 个测试用例），覆盖四个维度：
+工具系统测试位于 `__tests__/api.test.ts`（84 个测试用例），覆盖四个维度：
 
 ### toolRegistry 测试 (4 个用例)
 - 工具注册完整性（所有工具都在注册表中）
