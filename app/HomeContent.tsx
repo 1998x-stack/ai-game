@@ -5,9 +5,20 @@ import SettingsModal, { type AppSettings } from '@/components/SettingsModal';
 import ErrorConsole, { type GameError } from '@/components/ErrorConsole';
 import ChatPanel, { type ChatMessage } from '@/components/ChatPanel';
 import GamePreview from '@/components/GamePreview';
+import TodoPanel, { type TodoItem } from '@/components/TodoPanel';
 import { Loader2 } from 'lucide-react';
 
 const STORAGE_KEY = 'ai-game-settings';
+
+function parseTodoItems(content: string): TodoItem[] {
+  const lines = content.split('\n');
+  return lines
+    .filter((line) => line.match(/^-\s*\[[ x]\]/))
+    .map((line) => ({
+      text: line.replace(/^-\s*\[[ x]\]\s*/, '').trim(),
+      done: line.includes('[x]'),
+    }));
+}
 
 const defaultSettings: AppSettings = {
   provider: 'DeepSeek',
@@ -28,6 +39,7 @@ export default function HomeContent() {
   const [mobileView, setMobileView] = useState<'chat' | 'game'>('chat');
   const [restoringSession, setRestoringSession] = useState(false);
   const [confirmNewGame, setConfirmNewGame] = useState(false);
+  const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
 
   const isDragging = useRef(false);
 
@@ -185,6 +197,21 @@ export default function HomeContent() {
                     name: event.name,
                     arguments: event.arguments,
                   });
+                  if (event.name === 'write_todo' && event.arguments?.content) {
+                    const items = parseTodoItems(String(event.arguments.content));
+                    setTodoItems(items);
+                  } else if (event.name === 'edit_file' && event.arguments?.path === 'todo.md') {
+                    const newContent = String(event.arguments.new_str || '');
+                    if (newContent.includes('[x]')) {
+                      const oldContent = String(event.arguments.old_str || '');
+                      const doneText = oldContent.replace(/^-\s*\[ \]\s*/, '').trim();
+                      setTodoItems((prev) =>
+                        prev.map((item) =>
+                          item.text === doneText ? { ...item, done: true } : item,
+                        ),
+                      );
+                    }
+                  }
                   break;
                 case 'build_result':
                   if (event.success && event.previewUrl) {
@@ -245,6 +272,7 @@ export default function HomeContent() {
     setMessages([]);
     setGameUrl(null);
     setErrors([]);
+    setTodoItems([]);
     setConfirmNewGame(false);
   }, []);
 
@@ -351,6 +379,7 @@ export default function HomeContent() {
             : undefined
         }
       >
+        <TodoPanel items={todoItems} />
         <ChatPanel
           messages={messages}
           onSend={handleSendMessage}
