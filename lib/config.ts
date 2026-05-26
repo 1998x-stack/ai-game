@@ -22,6 +22,23 @@ export const CONFIG = {
   // ── Tool defaults ──
   tools: {
     readFileDefaultLimit: 2000,
+    // Allowlists: which tools each agent role can use
+    allowed: {
+      master: [
+        'read_file',
+        'write_file',
+        'edit_file',
+        'list_directory',
+        'grep_file',
+        'build_game',
+        'load_skills',
+        'write_todo',
+        'set_error',
+        'delegate_subagent',
+        // 'game_runtime' — disabled by default (resource-intensive)
+      ],
+      subagent: ['read_file', 'write_file', 'grep_file', 'list_directory'],
+    } as Record<string, readonly string[]>,
   },
 
   // ── Game runtime ──

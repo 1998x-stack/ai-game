@@ -596,7 +596,7 @@ async function delegateSubagentHandler(
         response = await client.chat.completions.create({
           model: config.model,
           messages,
-          tools: SUBAGENT_TOOLS,
+          tools: getOpenAIToolsFiltered('subagent'),
         });
       } catch (primaryErr) {
         const fallback = config.fallbackModel;
@@ -604,7 +604,7 @@ async function delegateSubagentHandler(
         response = await client.chat.completions.create({
           model: fallback,
           messages,
-          tools: SUBAGENT_TOOLS,
+          tools: getOpenAIToolsFiltered('subagent'),
         });
       }
 
@@ -904,5 +904,14 @@ export const toolRegistry: ToolHandler[] = [
 export const tools: ToolDefinition[] = toolRegistry.map(t => t.definition);
 
 export function getOpenAITools(): { type: 'function'; function: ToolDefinition }[] {
-  return tools.map(tool => ({ type: 'function' as const, function: tool }));
+  return getOpenAIToolsFiltered('master');
+}
+
+export function getOpenAIToolsFiltered(
+  role: 'master' | 'subagent',
+): { type: 'function'; function: ToolDefinition }[] {
+  const allowed = CONFIG.tools.allowed[role];
+  return toolRegistry
+    .filter((t) => allowed.includes(t.definition.name))
+    .map((t) => ({ type: 'function' as const, function: t.definition }));
 }
