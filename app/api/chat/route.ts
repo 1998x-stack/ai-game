@@ -3,13 +3,13 @@ import { createAgent } from '@/lib/agent/factory';
 import type { AgentSession } from '@/lib/agent/types';
 import { readScaffoldDocs, getGotchas } from '@/lib/scaffold/reader';
 import { agentSessions, appendToJsonl, readJsonl, jsonlExists } from '@/lib/session-store';
+import { CONFIG } from '@/lib/config';
 import fs from 'fs/promises';
 import path from 'path';
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_MESSAGE_LENGTH = 50000;
-const ALLOWED_PROVIDERS = new Set(['deepseek', 'openai', 'claude']);
+const UUID_RE = CONFIG.validation.uuidPattern;
+const MAX_MESSAGE_LENGTH = CONFIG.agent.maxMessageLength;
+const ALLOWED_PROVIDERS = CONFIG.providers.allowed;
 
 function parseTodoMd(content: string): Array<{
   task: string;
@@ -226,7 +226,7 @@ export async function POST(request: Request) {
 
       let systemPrompt = parts.join('');
 
-      const MAX_PROMPT_LENGTH = 30000;
+      const MAX_PROMPT_LENGTH = CONFIG.agent.maxPromptLength;
       if (systemPrompt.length > MAX_PROMPT_LENGTH) {
         const baseInstructions = parts.slice(0, 5).join('\n');
         const finalInstructions = parts.slice(-5).join('\n');

@@ -11,6 +11,7 @@ import {
   ToolResult,
 } from './types';
 import { getOpenAITools, toolRegistry } from './tools';
+import { CONFIG } from '@/lib/config';
 
 function toOpenAIMessages(
   messages: AgentMessage[],
@@ -89,12 +90,12 @@ export class DeepSeekAgent implements AgentSession {
     this.systemPrompt = systemPrompt;
     this.workspaceRoot = path.resolve(workspaceRoot);
     this.messages = [];
-    this.maxIterations = config.maxIterations ?? 10;
-    this.toolTimeout = config.toolTimeout ?? 30000;
+    this.maxIterations = config.maxIterations ?? CONFIG.agent.maxIterations;
+    this.toolTimeout = config.toolTimeout ?? CONFIG.agent.toolTimeoutMs;
 
     this.client = new OpenAI({
       apiKey: config.apiKey,
-      baseURL: config.baseUrl || 'https://api.deepseek.com',
+      baseURL: config.baseUrl || CONFIG.providers.deepseek.defaultBaseUrl,
     });
   }
 

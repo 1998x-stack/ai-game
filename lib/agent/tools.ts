@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { chromium } from 'playwright';
 import { AgentConfig, ToolDefinition, ToolHandler } from './types';
 import { buildGame } from '@/lib/build/packager';
+import { CONFIG } from '@/lib/config';
 
 function validatePath(userPath: string, workspaceRoot: string): string {
   if (userPath.includes('..')) {
@@ -183,7 +184,7 @@ async function readFileHandler(args: Record<string, unknown>, root: string) {
   const lines = content.split('\n');
   const totalLines = lines.length;
   const offset = typeof args.offset === 'number' ? Math.max(1, Math.floor(args.offset)) : 1;
-  const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : 2000;
+  const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : CONFIG.tools.readFileDefaultLimit;
   const start = offset - 1;
   const end = limit ? Math.min(start + limit, totalLines) : totalLines;
 
@@ -474,8 +475,8 @@ async function setErrorHandler(args: Record<string, unknown>) {
 }
 
 // --- Subagent Infrastructure ---
-const MAX_SUBAGENTS = 3;
-const SUBAGENT_MAX_ITERATIONS = 5;
+const MAX_SUBAGENTS = CONFIG.subagent.maxConcurrent;
+const SUBAGENT_MAX_ITERATIONS = CONFIG.subagent.maxIterations;
 const subagentCounters = new Map<string, number>();
 
 const SUBAGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -581,7 +582,7 @@ async function delegateSubagentHandler(
   try {
     const client = new OpenAI({
       apiKey: config.apiKey,
-      baseURL: config.baseUrl || 'https://api.deepseek.com',
+      baseURL: config.baseUrl || CONFIG.providers.deepseek.defaultBaseUrl,
     });
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -686,8 +687,13 @@ async function gameRuntimeHandler(
   }
 
   const maxSteps =
-    typeof args.maxSteps === 'number' ? Math.floor(args.maxSteps) : 15;
-  const fps = typeof args.fps === 'number' ? Math.floor(args.fps) : 5;
+    typeof args.maxSteps === 'number'
+      ? Math.floor(args.maxSteps)
+      : CONFIG.gameRuntime.defaultMaxSteps;
+  const fps =
+    typeof args.fps === 'number'
+      ? Math.floor(args.fps)
+      : CONFIG.gameRuntime.defaultFps;
   const stepDelay = Math.round(1000 / fps);
 
   const outputPath = path.join(root, 'output', 'index.html');
@@ -696,7 +702,7 @@ async function gameRuntimeHandler(
   }
 
   const html = fs.readFileSync(outputPath, 'utf-8');
-  const fallbackModel = config.fallbackModel || 'deepseek-v4-flash';
+  const fallbackModel = config.fallbackModel || CONFIG.providers.deepseek.fallbackModel;
 
   const testReport: string[] = [];
   const issues: string[] = [];
@@ -758,7 +764,7 @@ async function gameRuntimeHandler(
 
     const client = new OpenAI({
       apiKey: config.apiKey,
-      baseURL: config.baseUrl || 'https://api.deepseek.com',
+      baseURL: config.baseUrl || CONFIG.providers.deepseek.defaultBaseUrl,
     });
 
     for (let step = 0; step < maxSteps; step++) {

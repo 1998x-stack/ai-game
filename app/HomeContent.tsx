@@ -6,14 +6,15 @@ import ErrorConsole, { type GameError } from '@/components/ErrorConsole';
 import ChatPanel, { type ChatMessage, type TodoUpdate } from '@/components/ChatPanel';
 import GamePreview from '@/components/GamePreview';
 import { Loader2 } from 'lucide-react';
+import { CONFIG } from '@/lib/config';
 
 const STORAGE_KEY = 'ai-game-settings';
 
 const defaultSettings: AppSettings = {
   provider: 'DeepSeek',
   apiKey: '',
-  model: 'deepseek-v4-pro',
-  baseUrl: 'https://api.deepseek.com',
+  model: CONFIG.providers.deepseek.defaultModel,
+  baseUrl: CONFIG.providers.deepseek.defaultBaseUrl,
 };
 
 export default function HomeContent() {
