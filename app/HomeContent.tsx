@@ -29,6 +29,7 @@ export default function HomeContent() {
   const [mobileView, setMobileView] = useState<'chat' | 'game'>('chat');
   const [restoringSession, setRestoringSession] = useState(false);
   const [confirmNewGame, setConfirmNewGame] = useState(false);
+  const [todoUpdate, setTodoUpdate] = useState<TodoUpdate | null>(null);
 
   const isDragging = useRef(false);
 
@@ -195,12 +196,12 @@ export default function HomeContent() {
                   agentMsg.buildResult = event.success;
                   break;
                 case 'todo_update':
-                  agentMsg.todoUpdate = {
+                  setTodoUpdate({
                     tasks: event.tasks,
                     done: event.done,
                     pending: event.pending,
                     next: event.next,
-                  } as TodoUpdate;
+                  } as TodoUpdate);
                   break;
                 case 'error':
                   streamedContent += `\nError: ${event.message}`;
@@ -254,6 +255,7 @@ export default function HomeContent() {
     setMessages([]);
     setGameUrl(null);
     setErrors([]);
+    setTodoUpdate(null);
     setConfirmNewGame(false);
   }, []);
 
@@ -367,6 +369,7 @@ export default function HomeContent() {
           onNewGame={handleNewGame}
           isGenerating={isGenerating}
           sessionId={sessionId}
+          todoUpdate={todoUpdate}
         />
       </div>
 

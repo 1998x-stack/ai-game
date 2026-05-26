@@ -21,7 +21,6 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
   buildResult?: boolean;
   reasoningContent?: string;
-  todoUpdate?: TodoUpdate;
 }
 
 interface Props {
@@ -31,6 +30,7 @@ interface Props {
   onNewGame: () => void;
   isGenerating: boolean;
   sessionId: string;
+  todoUpdate?: TodoUpdate | null;
 }
 
 const examplePrompts = [
@@ -46,6 +46,7 @@ export default function ChatPanel({
   onNewGame,
   isGenerating,
   sessionId,
+  todoUpdate,
 }: Props) {
   const [input, setInput] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
@@ -335,6 +336,13 @@ export default function ChatPanel({
         <SessionBar sessionId={sessionId} />
       )}
 
+      {/* Persistent Game Plan — updates on every write_todo/edit_file */}
+      {todoUpdate && (
+        <div className="px-4 pt-3">
+          <TodoCard update={todoUpdate} />
+        </div>
+      )}
+
       {/* Messages — aria-live region for screen reader announcements */}
       <div
         ref={listRef}
@@ -428,11 +436,6 @@ export default function ChatPanel({
                       <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs animate-pulse">
                         🎮 Game ready! Play on the right →
                       </div>
-                    )}
-
-                    {/* Todo progress */}
-                    {msg.todoUpdate && (
-                      <TodoCard update={msg.todoUpdate} />
                     )}
                   </div>
                   )}
