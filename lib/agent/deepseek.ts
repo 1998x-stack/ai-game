@@ -133,11 +133,7 @@ export class DeepSeekAgent implements AgentSession {
         ...toOpenAIMessages(this.messages),
       ];
 
-      const response = await this.client.chat.completions.create({
-        model: this.config.model,
-        messages: openAIMessages,
-        tools: getOpenAITools(),
-      });
+      const response = await this.createCompletion(openAIMessages, onEvent);
 
       if (response.usage) {
         totalUsage.promptTokens += response.usage.prompt_tokens;
@@ -268,11 +264,36 @@ export class DeepSeekAgent implements AgentSession {
     const tool = toolRegistry.find((t) => t.definition.name === name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
     return Promise.race([
-      tool.handler(args, this.workspaceRoot),
+      tool.handler(args, this.workspaceRoot, this.config),
       new Promise<string>((_, reject) =>
         setTimeout(() => reject(new Error(`Tool "${name}" timed out after ${this.toolTimeout}ms`)), this.toolTimeout),
       ),
     ]);
+  }
+
+  private async createCompletion(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    onEvent?: (event: StreamEvent) => void,
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+    try {
+      return await this.client.chat.completions.create({
+        model: this.config.model,
+        messages,
+        tools: getOpenAITools(),
+      });
+    } catch (err) {
+      const fallback = this.config.fallbackModel;
+      if (!fallback || fallback === this.config.model) throw err;
+      onEvent?.({
+        type: 'message',
+        content: `[Primary model unavailable, retrying with ${fallback}...]`,
+      });
+      return await this.client.chat.completions.create({
+        model: fallback,
+        messages,
+        tools: getOpenAITools(),
+      });
+    }
   }
 
   getHistory(): AgentMessage[] {

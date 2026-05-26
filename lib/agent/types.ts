@@ -5,6 +5,7 @@ export interface AgentConfig {
   baseUrl?: string;
   maxIterations?: number;
   toolTimeout?: number;
+  fallbackModel?: string;
 }
 
 export interface ToolDefinition {
@@ -15,7 +16,7 @@ export interface ToolDefinition {
 
 export interface ToolHandler {
   definition: ToolDefinition;
-  handler: (args: Record<string, unknown>, workspaceRoot: string) => Promise<string>;
+  handler: (args: Record<string, unknown>, workspaceRoot: string, config?: AgentConfig) => Promise<string>;
 }
 
 export interface ToolCall {
