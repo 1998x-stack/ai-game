@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Settings, Plus, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Send, Settings, Plus, Loader2, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react';
 
 export interface ToolCall {
   name: string;
@@ -13,6 +13,7 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCall[];
   buildResult?: boolean;
+  reasoningContent?: string;
 }
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
   onOpenSettings: () => void;
   onNewGame: () => void;
   isGenerating: boolean;
+  sessionId: string;
 }
 
 const examplePrompts = [
@@ -35,6 +37,7 @@ export default function ChatPanel({
   onOpenSettings,
   onNewGame,
   isGenerating,
+  sessionId,
 }: Props) {
   const [input, setInput] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
@@ -70,32 +73,215 @@ export default function ChatPanel({
     }
   };
 
+  const renderInline = (text: string): React.ReactNode => {
+    const inlineParts = text.split(
+      /(`[^`]+`|\[[^\]]+\]\([^)]+\)|\*\*\*[^*]+?\*\*\*|\*\*[^*]+?\*\*|__[^_]+?__|(?<!\*)\*[^*]+?\*(?!\*)|(?<!_)_[^_]+?_(?!_))/g
+    );
+    return inlineParts
+      .filter((part) => part !== '')
+      .map((part, i) => {
+        // Inline code: `code`
+        if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+          return (
+            <code
+              key={i}
+              className="px-[3px] py-[1px] rounded bg-black/20 text-panel-text font-mono text-[12px]"
+            >
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+
+        // Link: [text](url)
+        const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (linkMatch) {
+          return (
+            <a
+              key={i}
+              href={linkMatch[2]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-panel-accent underline decoration-panel-accent/30 hover:decoration-panel-accent transition-colors"
+            >
+              {renderInline(linkMatch[1])}
+            </a>
+          );
+        }
+
+        // Bold + Italic: ***text*** or ___text___
+        if (
+          (part.startsWith('***') && part.endsWith('***')) ||
+          (part.startsWith('___') && part.endsWith('___'))
+        ) {
+          return (
+            <strong key={i}>
+              <em className="italic">{part.slice(3, -3)}</em>
+            </strong>
+          );
+        }
+
+        // Bold: **text** or __text__
+        if (
+          (part.startsWith('**') && part.endsWith('**')) ||
+          (part.startsWith('__') && part.endsWith('__'))
+        ) {
+          return (
+            <strong key={i} className="font-semibold text-panel-text">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+
+        // Italic: *text* or _text_
+        if (
+          (part.startsWith('*') && part.endsWith('*') && part.length > 1) ||
+          (part.startsWith('_') && part.endsWith('_') && part.length > 1)
+        ) {
+          return (
+            <em key={i} className="italic text-panel-text/80">
+              {part.slice(1, -1)}
+            </em>
+          );
+        }
+
+        // Plain text — render newlines as <br/>
+        if (part.includes('\n')) {
+          return part.split('\n').map((seg, j) => (
+            <span key={`${i}-${j}`}>
+              {j > 0 && <br />}
+              {seg}
+            </span>
+          ));
+        }
+
+        return <span key={i}>{part}</span>;
+      });
+  };
+
   const renderContent = (content: string) => {
-    // Simple markdown-ish formatting: code blocks, bold, italic
-    const parts = content.split(/(```[\s\S]*?```|__[\s\S]*?__|\*[\s\S]*?\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('```') && part.endsWith('```')) {
-        const code = part.slice(3, -3);
-        const lang = code.split('\n')[0];
-        const body = code.includes('\n') ? code.slice(code.indexOf('\n') + 1) : code;
-        return (
-          <pre
-            key={i}
-            className="my-1.5 px-3 py-2 rounded bg-black/30 text-panel-muted text-[12px] leading-relaxed overflow-x-auto"
-          >
-            {lang && !body && <span className="text-panel-muted/50">{lang}</span>}
-            {body || lang}
-          </pre>
+    if (!content.trim()) return null;
+
+    const lines = content.split('\n');
+    const elements: React.ReactNode[] = [];
+    let i = 0;
+    let key = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // Code block: ```lang ... ```
+      if (line.startsWith('```')) {
+        const lang = line.slice(3).trim() || undefined;
+        let code = '';
+        i++;
+        while (i < lines.length && !lines[i].startsWith('```')) {
+          code += lines[i] + '\n';
+          i++;
+        }
+        code = code.replace(/\n$/, ''); // drop trailing newline
+        i++; // skip closing ```
+        elements.push(<CodeBlock key={key++} code={code} lang={lang} />);
+        continue;
+      }
+
+      // Horizontal rule: ---
+      if (/^-{3,}$/.test(line.trim())) {
+        elements.push(
+          <div key={key++} className="my-2 border-t border-panel-border/50" />
         );
+        i++;
+        continue;
       }
-      if (part.startsWith('__') && part.endsWith('__')) {
-        return <strong key={i} className="text-panel-text">{part.slice(2, -2)}</strong>;
+
+      // Heading: ## text
+      const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const text = headingMatch[2];
+        const sizeMap: Record<number, string> = {
+          1: 'text-base font-bold text-panel-text mt-2 mb-1',
+          2: 'text-sm font-bold text-panel-text mt-1.5 mb-1',
+          3: 'text-[13px] font-bold text-panel-text mt-1.5 mb-0.5',
+          4: 'text-[13px] font-semibold text-panel-text mt-1 mb-0.5',
+          5: 'text-xs font-semibold text-panel-text/90 mt-1 mb-0.5',
+          6: 'text-xs font-semibold text-panel-text/80 mt-1 mb-0.5',
+        };
+        elements.push(
+          <div key={key++} className={sizeMap[level] || sizeMap[3]}>
+            {renderInline(text)}
+          </div>
+        );
+        i++;
+        continue;
       }
-      if (part.startsWith('*') && part.endsWith('*')) {
-        return <em key={i} className="text-panel-text/80">{part.slice(1, -1)}</em>;
+
+      // Unordered list: - item or * item
+      if (/^[-*]\s/.test(line)) {
+        const items: string[] = [];
+        while (i < lines.length && /^[-*]\s/.test(lines[i])) {
+          items.push(lines[i].replace(/^[-*]\s+/, ''));
+          i++;
+        }
+        elements.push(
+          <ul key={key++} className="list-disc list-inside mb-1 space-y-0.5">
+            {items.map((item, j) => (
+              <li key={j} className="text-panel-text/90 text-sm leading-relaxed">
+                {renderInline(item)}
+              </li>
+            ))}
+          </ul>
+        );
+        continue;
       }
-      return <span key={i}>{part}</span>;
-    });
+
+      // Ordered list: 1. item
+      if (/^\d+\.\s/.test(line)) {
+        const items: string[] = [];
+        while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+          items.push(lines[i].replace(/^\d+\.\s+/, ''));
+          i++;
+        }
+        elements.push(
+          <ol key={key++} className="list-decimal list-inside mb-1 space-y-0.5">
+            {items.map((item, j) => (
+              <li key={j} className="text-panel-text/90 text-sm leading-relaxed">
+                {renderInline(item)}
+              </li>
+            ))}
+          </ol>
+        );
+        continue;
+      }
+
+      // Paragraph (consecutive non-blank, non-special lines)
+      if (line.trim() !== '') {
+        const paraLines: string[] = [line];
+        i++;
+        while (
+          i < lines.length &&
+          lines[i].trim() !== '' &&
+          !lines[i].startsWith('```') &&
+          !/^#{1,6}\s/.test(lines[i]) &&
+          !/^-{3,}$/.test(lines[i].trim()) &&
+          !/^[-*]\s/.test(lines[i]) &&
+          !/^\d+\.\s/.test(lines[i])
+        ) {
+          paraLines.push(lines[i]);
+          i++;
+        }
+        elements.push(
+          <p key={key++} className="mb-1 last:mb-0 text-sm leading-relaxed">
+            {renderInline(paraLines.join('\n'))}
+          </p>
+        );
+        continue;
+      }
+
+      // Skip blank lines
+      i++;
+    }
+
+    return elements.length > 0 ? <>{elements}</> : null;
   };
 
   // Auto-focus input when not generating
@@ -134,6 +320,10 @@ export default function ChatPanel({
           </button>
         </div>
       </header>
+
+      {sessionId && (
+        <SessionBar sessionId={sessionId} />
+      )}
 
       {/* Messages */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -188,6 +378,11 @@ export default function ChatPanel({
                 <div className="flex justify-start">
                   <div className="max-w-[92%] px-4 py-2.5 rounded-2xl rounded-bl-md bg-panel-surface text-panel-text text-sm leading-relaxed">
                     {renderContent(msg.content)}
+
+                    {/* Reasoning / thinking content — auto-expand */}
+                    {msg.reasoningContent && (
+                      <ReasoningBlock content={msg.reasoningContent} />
+                    )}
 
                     {/* Tool calls */}
                     {msg.toolCalls && msg.toolCalls.length > 0 && (
@@ -263,6 +458,62 @@ export default function ChatPanel({
   );
 }
 
+function ReasoningBlock({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(true);
+  const collapsed = !expanded && content.length > 200;
+
+  return (
+    <div className="mt-2 rounded-lg bg-amber-500/5 border border-amber-500/15 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-amber-400/80 hover:text-amber-300 transition-colors"
+      >
+        <ChevronDown
+          className={`w-3 h-3 transition-transform ${expanded ? '' : '-rotate-90'}`}
+        />
+        💭 Thinking...
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 text-xs text-amber-300/60 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionBar({ sessionId }: { sessionId: string }) {
+  const [copied, setCopied] = useState(false);
+  const resumeUrl = `${window.location.origin}/?session=${sessionId}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(resumeUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="px-4 py-1.5 bg-panel-surface/50 border-b border-panel-border/50 flex items-center gap-2 text-[10px] text-panel-muted">
+      <span className="truncate flex-1">
+        Session: {sessionId.slice(0, 8)}...
+      </span>
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors text-panel-muted hover:text-panel-text"
+        title="Copy resume link"
+      >
+        {copied ? (
+          <Check className="w-3 h-3 text-emerald-400" />
+        ) : (
+          <Copy className="w-3 h-3" />
+        )}
+        {copied ? 'Copied!' : 'Copy link'}
+      </button>
+    </div>
+  );
+}
+
 function ToolCallCard({ call }: { call: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -290,5 +541,40 @@ function ToolCallCard({ call }: { call: ToolCall }) {
         </pre>
       )}
     </button>
+  );
+}
+
+function CodeBlock({ code, lang }: { code: string; lang?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="my-1.5 rounded-lg overflow-hidden bg-gray-950 border border-white/5">
+      {lang && (
+        <div className="flex items-center justify-between px-3 py-1.5 bg-white/[0.03] border-b border-white/5">
+          <span className="text-[11px] text-panel-muted/50 font-mono uppercase tracking-wider">
+            {lang}
+          </span>
+        </div>
+      )}
+      <div className="relative group">
+        <pre className="px-3 py-2 text-[12px] leading-relaxed overflow-x-auto font-mono text-panel-muted/90 whitespace-pre">
+          <code>{code}</code>
+        </pre>
+        <button
+          onClick={handleCopy}
+          className="absolute top-1.5 right-1.5 p-1 rounded bg-white/10 hover:bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity text-panel-muted/60 hover:text-panel-text"
+          title="Copy code"
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        </button>
+      </div>
+    </div>
   );
 }

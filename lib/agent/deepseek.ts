@@ -6,6 +6,7 @@ import {
   AgentMessage,
   AgentResponse,
   AgentSession,
+  StreamEvent,
   ToolCall,
   ToolResult,
 } from './types';
@@ -51,11 +52,13 @@ function toOpenAIMessages(
       case 'user':
         return { role: 'user' as const, content: msg.content };
       case 'assistant': {
-        const result: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam =
-          {
-            role: 'assistant' as const,
-            content: msg.content || null,
-          };
+        const result = {
+          role: 'assistant' as const,
+          content: msg.content || null,
+          ...(msg.reasoning_content
+            ? { reasoning_content: msg.reasoning_content }
+            : {}),
+        } as OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam;
         if (msg.tool_calls && msg.tool_calls.length > 0) {
           result.tool_calls = msg.tool_calls.map((tc) => ({
             id: tc.id,
@@ -149,6 +152,9 @@ export class DeepSeekAgent implements AgentSession {
       const agentMsg: AgentMessage = {
         role: 'assistant',
         content: responseMessage.content ?? '',
+        reasoning_content:
+          (responseMessage as unknown as Record<string, unknown>)
+            .reasoning_content as string | undefined,
       };
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -186,6 +192,110 @@ export class DeepSeekAgent implements AgentSession {
     if (reachedLimit) {
       finishReason = allToolCalls.length > 0 ? 'tool_calls' : 'length';
     }
+
+    return {
+      message: finalMessage,
+      toolCalls: allToolCalls,
+      finishReason,
+    };
+  }
+
+  async sendMessageStream(
+    content: string,
+    onEvent: (event: StreamEvent) => void,
+  ): Promise<AgentResponse> {
+    this.messages.push({ role: 'user', content });
+
+    const allToolCalls: ToolCall[] = [];
+    let finalMessage = '';
+    let finishReason: AgentResponse['finishReason'] = 'stop';
+    let reachedLimit = true;
+
+    for (let iteration = 0; iteration < this.maxIterations; iteration++) {
+      const openAIMessages = [
+        { role: 'system' as const, content: this.systemPrompt },
+        ...toOpenAIMessages(this.messages),
+      ];
+
+      const response = await this.client.chat.completions.create({
+        model: this.config.model,
+        messages: openAIMessages,
+        tools: getOpenAITools(),
+      });
+
+      const choice = response.choices[0];
+      const responseMessage = choice.message;
+
+      const assistantContent = responseMessage.content ?? '';
+      const reasoningContent =
+        (responseMessage as unknown as Record<string, unknown>)
+          .reasoning_content as string | undefined;
+
+      if (reasoningContent) {
+        onEvent({ type: 'reasoning', content: reasoningContent });
+      }
+      if (assistantContent) {
+        onEvent({ type: 'message', content: assistantContent });
+      }
+
+      const agentMsg: AgentMessage = {
+        role: 'assistant',
+        content: assistantContent,
+        reasoning_content: reasoningContent,
+      };
+
+      const hasToolCalls =
+        responseMessage.tool_calls && responseMessage.tool_calls.length > 0;
+
+      if (hasToolCalls) {
+        const parsedCalls = fromOpenAIToolCalls(responseMessage.tool_calls!);
+        agentMsg.tool_calls = parsedCalls;
+        allToolCalls.push(...parsedCalls);
+
+        for (const tc of parsedCalls) {
+          onEvent({
+            type: 'tool_call',
+            name: tc.name,
+            arguments: tc.arguments,
+          });
+        }
+      }
+
+      this.messages.push(agentMsg);
+
+      if (!hasToolCalls) {
+        finalMessage = assistantContent;
+        finishReason =
+          choice.finish_reason === 'length' ? 'length' : 'stop';
+        reachedLimit = false;
+        break;
+      }
+
+      const toolResults = await this.executeToolCalls(
+        responseMessage.tool_calls!,
+      );
+
+      for (const result of toolResults) {
+        this.messages.push({
+          role: 'tool',
+          content: result.error ? `Error: ${result.error}` : result.result,
+          tool_call_id: result.id,
+        });
+
+        onEvent({
+          type: 'tool_result',
+          name: result.name,
+          result: result.result,
+          error: result.error,
+        });
+      }
+    }
+
+    if (reachedLimit) {
+      finishReason = allToolCalls.length > 0 ? 'tool_calls' : 'length';
+    }
+
+    onEvent({ type: 'done' });
 
     return {
       message: finalMessage,
@@ -307,6 +417,10 @@ export class DeepSeekAgent implements AgentSession {
 
   getHistory(): AgentMessage[] {
     return [...this.messages];
+  }
+
+  loadHistory(messages: AgentMessage[]): void {
+    this.messages = [...messages];
   }
 
   reset(): void {

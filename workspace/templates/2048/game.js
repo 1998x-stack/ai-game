@@ -1,14 +1,13 @@
-// 2048 Game — Pure HTML5 Canvas
-// 4x4 grid, swipe/touch + keyboard, tile merging animation, score, undo
+// 2048 Game — Using utils.js GameLoop + InputManager
+// 4x4 grid, swipe/touch + keyboard, tile merging, score, undo
 
 const GRID_SIZE = 4;
 const TILE_SIZE = 80;
 const GAP = 8;
 const PADDING = 10;
 const DESIGN_W = GRID_SIZE * (TILE_SIZE + GAP) + GAP + PADDING * 2;
-const DESIGN_H = DESIGN_W + 60; // Extra space for header
+const DESIGN_H = DESIGN_W + 60;
 
-// Tile color map by value
 const TILE_COLORS = {
     2:    { bg: '#eee4da', text: '#776e65' },
     4:    { bg: '#ede0c8', text: '#776e65' },
@@ -24,13 +23,12 @@ const TILE_COLORS = {
 };
 
 export default class Game2048 {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        canvas.width = DESIGN_W;
-        canvas.height = DESIGN_H;
+    constructor() {
+        this.canvas = setupCanvas('gameCanvas', DESIGN_W, DESIGN_H);
+        this.ctx = this.canvas.getContext('2d');
+        this.input = new InputManager(this.canvas);
 
-        this.state = 'playing'; // playing | won | gameover
+        this.state = 'playing';
         this.score = 0;
         this.bestScore = parseInt(localStorage.getItem('2048HighScore') || '0');
         this.hasWon = false;
@@ -40,71 +38,13 @@ export default class Game2048 {
         this.previousScore = 0;
         this.undoAvailable = false;
 
-        // Track tiles for merge animation
-        this.mergeAnimations = [];
-        this.moveAnimations = [];
-        this.newTileAnim = null;
-
-        this.keys = {};
-        this._onKeyDown = (e) => {
-            this.keys[e.code] = true;
-            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) {
-                e.preventDefault();
-                const dirMap = {
-                    'ArrowUp': 'up', 'ArrowDown': 'down',
-                    'ArrowLeft': 'left', 'ArrowRight': 'right'
-                };
-                this.move(dirMap[e.code]);
-            }
-            if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                this.undo();
-            }
-            if (e.code === 'KeyR') {
-                this.reset();
-            }
-        };
-        this._onKeyUp = (e) => { this.keys[e.code] = false; };
-
-        document.addEventListener('keydown', this._onKeyDown);
-        document.addEventListener('keyup', this._onKeyUp);
-
-        // Touch/swipe support
-        this._touchStartX = 0;
-        this._touchStartY = 0;
-
-        canvas.addEventListener('touchstart', (e) => {
-            this._touchStartX = e.touches[0].clientX;
-            this._touchStartY = e.touches[0].clientY;
-        }, { passive: true });
-
-        canvas.addEventListener('touchend', (e) => {
-            const dx = e.changedTouches[0].clientX - this._touchStartX;
-            const dy = e.changedTouches[0].clientY - this._touchStartY;
-            const absDx = Math.abs(dx);
-            const absDy = Math.abs(dy);
-            if (Math.max(absDx, absDy) < 30) return;
-            if (absDx > absDy) {
-                this.move(dx > 0 ? 'right' : 'left');
-            } else {
-                this.move(dy > 0 ? 'down' : 'up');
-            }
-        }, { passive: true });
-
-        this._resize();
-        window.addEventListener('resize', () => this._resize());
+        this.loop = new GameLoop((dt) => {
+            this.update(dt);
+            this.render();
+            this.input.endFrame();
+        });
 
         this.reset();
-    }
-
-    _resize() {
-        const parent = this.canvas.parentElement;
-        if (!parent) return;
-        const maxW = parent.clientWidth || window.innerWidth;
-        const maxH = parent.clientHeight || window.innerHeight;
-        const scale = Math.min(maxW / DESIGN_W, maxH / DESIGN_H, 1);
-        this.canvas.style.width = `${DESIGN_W * scale}px`;
-        this.canvas.style.height = `${DESIGN_H * scale}px`;
     }
 
     reset() {
@@ -138,11 +78,10 @@ export default class Game2048 {
     addRandomTile() {
         const empty = this.getEmptyCells();
         if (empty.length === 0) return;
-        const cell = empty[Math.floor(Math.random() * empty.length)];
+        const cell = empty[randomInt(0, empty.length - 1)];
         this.grid[cell.r][cell.c] = Math.random() < 0.9 ? 2 : 4;
     }
 
-    // Serialize grid for undo
     saveState() {
         this.previousGrid = this.grid.map(row => [...row]);
         this.previousScore = this.score;
@@ -155,10 +94,42 @@ export default class Game2048 {
         this.score = this.previousScore;
         this.undoAvailable = false;
         if (this.state === 'gameover') {
-            // Re-check game over after undo
             if (!this.isGameOver()) {
                 this.state = 'playing';
             }
+        }
+    }
+
+    update(dt) {
+        if (this.input.justPressed('KeyR')) {
+            this.reset();
+            return;
+        }
+
+        if (this.input.justPressed('KeyZ')) {
+            const hasMod = this.input.isDown('ControlLeft') || this.input.isDown('ControlRight')
+                || this.input.isDown('MetaLeft') || this.input.isDown('MetaRight');
+            if (hasMod) {
+                this.undo();
+                return;
+            }
+        }
+
+        if (this.state === 'gameover' || this.state === 'won') return;
+
+        let dir = null;
+        if (this.input.justPressed('ArrowUp')) dir = 'up';
+        else if (this.input.justPressed('ArrowDown')) dir = 'down';
+        else if (this.input.justPressed('ArrowLeft')) dir = 'left';
+        else if (this.input.justPressed('ArrowRight')) dir = 'right';
+
+        if (!dir) {
+            const swipe = this.input.getSwipe();
+            if (swipe) dir = swipe;
+        }
+
+        if (dir) {
+            this.move(dir);
         }
     }
 
@@ -202,7 +173,6 @@ export default class Game2048 {
                     tr = nr;
                     tc = nc;
                 } else if (cell === this.grid[r][c] && !merged[`${nr},${nc}`]) {
-                    // Can merge
                     tr = nr;
                     tc = nc;
                     lastMergePos = { r: nr, c: nc };
@@ -225,7 +195,6 @@ export default class Game2048 {
             }
 
             if (target.merge) {
-                // Merge
                 const mergedValue = this.grid[r][c] * 2;
                 this.grid[target.merge.r][target.merge.c] = mergedValue;
                 merged[`${target.merge.r},${target.merge.c}`] = true;
@@ -256,17 +225,14 @@ export default class Game2048 {
                 this.state = 'gameover';
             }
         } else {
-            // No move happened — restore state (undo not available)
             this.undoAvailable = false;
             this.previousGrid = null;
         }
     }
 
     isGameOver() {
-        // Check for empty cells
         if (this.getEmptyCells().length > 0) return false;
 
-        // Check for possible merges
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
                 const val = this.grid[r][c];
@@ -278,19 +244,16 @@ export default class Game2048 {
     }
 
     getTileColor(value) {
-        const colors = TILE_COLORS[value] || { bg: '#3c3a32', text: '#f9f6f2' };
-        return colors;
+        return TILE_COLORS[value] || { bg: '#3c3a32', text: '#f9f6f2' };
     }
 
     render() {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, DESIGN_W, DESIGN_H);
 
-        // Background
         ctx.fillStyle = '#faf8ef';
         ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
 
-        // Header
         ctx.fillStyle = '#776e65';
         ctx.font = 'bold 32px monospace';
         ctx.textAlign = 'left';
@@ -301,7 +264,6 @@ export default class Game2048 {
         ctx.fillText(`SCORE: ${this.score}`, DESIGN_W - PADDING, 22);
         ctx.fillText(`BEST: ${this.bestScore}`, DESIGN_W - PADDING, 42);
 
-        // Grid background
         const gridX = PADDING;
         const gridY = 60;
         const gridW = GRID_SIZE * (TILE_SIZE + GAP) + GAP;
@@ -309,7 +271,6 @@ export default class Game2048 {
         ctx.fillStyle = '#bbada0';
         ctx.fillRect(gridX, gridY, gridW, gridW);
 
-        // Tiles
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
                 const value = this.grid[r][c];
@@ -317,7 +278,6 @@ export default class Game2048 {
                 const y = gridY + GAP + r * (TILE_SIZE + GAP);
 
                 if (value === 0) {
-                    // Empty cell
                     ctx.fillStyle = 'rgba(238, 228, 218, 0.35)';
                     ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
                 } else {
@@ -335,13 +295,11 @@ export default class Game2048 {
             }
         }
 
-        // Undo hint
         ctx.fillStyle = '#bbb';
         ctx.font = '12px monospace';
         ctx.textAlign = 'left';
         ctx.fillText('Ctrl+Z to undo  |  R to reset', PADDING, DESIGN_H - 10);
 
-        // Overlays
         if (this.state === 'won') {
             this._drawOverlay('YOU WIN!', 'Keep playing? Keep swiping!');
         } else if (this.state === 'gameover') {
@@ -366,23 +324,18 @@ export default class Game2048 {
         ctx.fillText(subtitle, DESIGN_W / 2, DESIGN_H / 2 + 10);
     }
 
+    // === Public API ===
+
     start() {
-        this.lastTime = performance.now();
-        const loop = (timestamp) => {
-            const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05);
-            this.lastTime = timestamp;
-            this.render();
-            this.rafId = requestAnimationFrame(loop);
-        };
-        this.rafId = requestAnimationFrame(loop);
+        this.loop.start();
     }
 
     stop() {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-        }
-        document.removeEventListener('keydown', this._onKeyDown);
-        document.removeEventListener('keyup', this._onKeyUp);
+        this.loop.stop();
+        this.input.destroy();
     }
 }
+
+// Auto-start when loaded in the build pipeline
+const game = new Game2048();
+game.start();

@@ -1,14 +1,13 @@
-// Tetris Game — Pure HTML5 Canvas
+// Tetris Game — Using utils.js GameLoop + InputManager
 // All 7 tetrominoes, SRS rotation, wall kicks, line clearing, scoring, levels
 
 const COLS = 10;
 const ROWS = 20;
 const TILE = 30;
-const DESIGN_W = COLS * TILE + 160; // Extra 160 for side panel
+const DESIGN_W = COLS * TILE + 160;
 const DESIGN_H = ROWS * TILE;
 const PREVIEW_SIZE = 20;
 
-// Tetromino definitions with SRS rotation states
 const TETROMINOES = {
     I: {
         shapes: [
@@ -20,12 +19,7 @@ const TETROMINOES = {
         color: '#45e8d4'
     },
     O: {
-        shapes: [
-            [[1,1],[1,1]],
-            [[1,1],[1,1]],
-            [[1,1],[1,1]],
-            [[1,1],[1,1]]
-        ],
+        shapes: [[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]],
         color: '#e8d445'
     },
     T: {
@@ -75,39 +69,31 @@ const TETROMINOES = {
     }
 };
 
-// SRS wall kick data (J, L, S, T, Z)
 const WALL_KICKS_JLSTZ = [
-    [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],  // 0->R
-    [[0,0],[1,0],[1,-1],[0,2],[1,2]],      // R->2
-    [[0,0],[1,0],[1,1],[0,-2],[1,-2]],     // 2->L
-    [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]]    // L->0
+    [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+    [[0,0],[1,0],[1,-1],[0,2],[1,2]],
+    [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
+    [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]]
 ];
 
-// I-piece has different wall kicks
 const WALL_KICKS_I = [
-    [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],    // 0->R
-    [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],    // R->2
-    [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],    // 2->L
-    [[0,0],[1,0],[-2,0],[1,-2],[-2,1]]     // L->0
+    [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+    [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
+    [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+    [[0,0],[1,0],[-2,0],[1,-2],[-2,1]]
 ];
 
-// Points per lines cleared
 const LINE_POINTS = [0, 100, 300, 500, 800];
-
-// Time in seconds before each drop at level 1
 const LEVEL_SPEEDS = [0.8, 0.72, 0.63, 0.55, 0.47, 0.38, 0.30, 0.22, 0.15, 0.10];
-
-// Piece names for random bag generation
 const PIECE_NAMES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 
 export default class TetrisGame {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        canvas.width = DESIGN_W;
-        canvas.height = DESIGN_H;
+    constructor() {
+        this.canvas = setupCanvas('gameCanvas', DESIGN_W, DESIGN_H);
+        this.ctx = this.canvas.getContext('2d');
+        this.input = new InputManager(this.canvas);
 
-        this.state = 'menu'; // menu | playing | paused | gameover
+        this.state = 'menu';
         this.score = 0;
         this.level = 1;
         this.lines = 0;
@@ -124,36 +110,11 @@ export default class TetrisGame {
         this.isLocking = false;
         this.combo = -1;
 
-        this.keys = {};
-        this._onKeyDown = (e) => {
-            this.keys[e.code] = true;
-            if ((e.code === 'Space' || e.code === 'Enter') && this.state === 'menu') {
-                this.startGame();
-            } else if (e.code === 'KeyP') {
-                if (this.state === 'playing') this.state = 'paused';
-                else if (this.state === 'paused') this.state = 'playing';
-            }
-            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
-                e.preventDefault();
-            }
-        };
-        this._onKeyUp = (e) => { this.keys[e.code] = false; };
-
-        document.addEventListener('keydown', this._onKeyDown);
-        document.addEventListener('keyup', this._onKeyUp);
-
-        this._resize();
-        window.addEventListener('resize', () => this._resize());
-    }
-
-    _resize() {
-        const parent = this.canvas.parentElement;
-        if (!parent) return;
-        const maxW = parent.clientWidth || window.innerWidth;
-        const maxH = parent.clientHeight || window.innerHeight;
-        const scale = Math.min(maxW / DESIGN_W, maxH / DESIGN_H, 1);
-        this.canvas.style.width = `${DESIGN_W * scale}px`;
-        this.canvas.style.height = `${DESIGN_H * scale}px`;
+        this.loop = new GameLoop((dt) => {
+            this.update(dt);
+            this.render();
+            this.input.endFrame();
+        });
     }
 
     startGame() {
@@ -172,7 +133,6 @@ export default class TetrisGame {
         this._advancePiece();
     }
 
-    // 7-bag randomizer
     _fillBag() {
         const bag = [...PIECE_NAMES];
         for (let i = bag.length - 1; i > 0; i--) {
@@ -205,7 +165,6 @@ export default class TetrisGame {
         this.lockTimer = 0;
         this.lockMoves = 0;
 
-        // Check if new piece immediately collides
         if (this._collides(this.currentPiece.shape, this.currentPiece.x, this.currentPiece.y)) {
             this.state = 'gameover';
             this.saveHighScore();
@@ -237,13 +196,12 @@ export default class TetrisGame {
         const newRot = (oldRot + direction + 4) % 4;
         const newShape = this._getShape(piece, newRot);
 
-        // SRS wall kicks
         const kicks = piece.name === 'I' ? WALL_KICKS_I : WALL_KICKS_JLSTZ;
-        const kickIndex = oldRot; // 0->1, 1->2, 2->3, 3->0
+        const kickIndex = oldRot;
 
         for (const [kx, ky] of kicks[kickIndex]) {
             const testX = piece.x + kx;
-            const testY = piece.y - ky; // SRS y is inverted
+            const testY = piece.y - ky;
             if (!this._collides(newShape, testX, testY)) {
                 piece.rotation = newRot;
                 piece.shape = newShape;
@@ -289,7 +247,6 @@ export default class TetrisGame {
     }
 
     _onMove() {
-        // Reset lock timer on successful move (up to max moves)
         if (this.isLocking && this.lockMoves < this.lockMaxMoves) {
             this.lockTimer = 0;
             this.lockMoves++;
@@ -323,7 +280,7 @@ export default class TetrisGame {
                 this.board.splice(r, 1);
                 this.board.unshift(new Array(COLS).fill(0));
                 cleared++;
-                r++; // Re-check this row
+                r++;
             }
         }
 
@@ -344,14 +301,32 @@ export default class TetrisGame {
     }
 
     update(dt) {
-        if (this.state !== 'playing') return;
+        if (this.state === 'menu') {
+            if (this.input.justPressed('Space') || this.input.justPressed('Enter')) {
+                this.startGame();
+            }
+            return;
+        }
 
-        // Handle DAS (delayed auto shift) for left/right
-        if (this.keys['ArrowLeft']) this._moveDx(-1);
-        if (this.keys['ArrowRight']) this._moveDx(1);
-        if (this.keys['ArrowUp']) { this.keys['ArrowUp'] = false; this._rotate(1); }
-        if (this.keys['ArrowDown']) { this._softDrop(); }
-        if (this.keys['Space']) { this.keys['Space'] = false; this._hardDrop(); }
+        if (this.input.justPressed('KeyP')) {
+            if (this.state === 'playing') { this.state = 'paused'; return; }
+            if (this.state === 'paused') { this.state = 'playing'; return; }
+        }
+
+        if (this.state === 'paused') return;
+
+        if (this.state === 'gameover') {
+            if (this.input.justPressed('Space') || this.input.justPressed('Enter')) {
+                this.startGame();
+            }
+            return;
+        }
+
+        if (this.input.isDown('ArrowLeft')) this._moveDx(-1);
+
+        if (this.input.justPressed('ArrowUp')) this._rotate(1);
+        if (this.input.isDown('ArrowDown')) this._softDrop();
+        if (this.input.justPressed('Space')) this._hardDrop();
 
         if (!this.currentPiece) return;
 
@@ -360,7 +335,6 @@ export default class TetrisGame {
         if (this.dropTimer >= this.getDropSpeed()) {
             this.dropTimer = 0;
             if (!this._softDrop()) {
-                // Piece can't move down — start/extend lock delay
                 if (!this.isLocking) {
                     this.isLocking = true;
                     this.lockTimer = 0;
@@ -374,7 +348,6 @@ export default class TetrisGame {
             if (this.lockTimer >= 0.5) {
                 this._lockPiece();
             }
-            // If piece can move down again (e.g., line cleared below), cancel lock
             if (!this._collides(this.currentPiece.shape, this.currentPiece.x, this.currentPiece.y + 1)) {
                 this.isLocking = false;
             }
@@ -385,15 +358,12 @@ export default class TetrisGame {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, DESIGN_W, DESIGN_H);
 
-        // Background
         ctx.fillStyle = '#0f0f23';
         ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
 
-        // Board background
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, COLS * TILE, ROWS * TILE);
 
-        // Grid lines
         ctx.strokeStyle = 'rgba(255,255,255,0.04)';
         ctx.lineWidth = 1;
         for (let x = 0; x <= COLS; x++) {
@@ -409,30 +379,25 @@ export default class TetrisGame {
             ctx.stroke();
         }
 
-        // Locked tiles
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
                 if (this.board[r][c] !== 0) {
                     ctx.fillStyle = this.board[r][c];
                     ctx.fillRect(c * TILE + 1, r * TILE + 1, TILE - 2, TILE - 2);
-                    // Highlight
                     ctx.fillStyle = 'rgba(255,255,255,0.1)';
                     ctx.fillRect(c * TILE + 1, r * TILE + 1, TILE - 2, 4);
                 }
             }
         }
 
-        // Ghost piece (shadow showing where piece will land)
         if (this.currentPiece) {
             this._drawGhost(ctx);
         }
 
-        // Current piece
         if (this.currentPiece) {
             this._drawPiece(ctx, this.currentPiece, 0, 0);
         }
 
-        // Side panel
         const panelX = COLS * TILE + 20;
         ctx.fillStyle = '#fff';
         ctx.font = '14px monospace';
@@ -440,11 +405,10 @@ export default class TetrisGame {
         ctx.fillText('NEXT', panelX, 30);
         ctx.fillText(`LEVEL ${this.level}`, panelX, ROWS * TILE - 160);
         ctx.fillText(`LINES ${this.lines}`, panelX, ROWS * TILE - 130);
-        ctx.fillText(`SCORE`, panelX, ROWS * TILE - 90);
+        ctx.fillText('SCORE', panelX, ROWS * TILE - 90);
         ctx.fillText(`${this.score}`, panelX, ROWS * TILE - 70);
         ctx.fillText(`HI ${this.highScore}`, panelX, ROWS * TILE - 40);
 
-        // Next piece preview
         if (this.nextPiece) {
             const previewShape = this._getShape(this.nextPiece, 0);
             const pSize = PREVIEW_SIZE;
@@ -460,7 +424,6 @@ export default class TetrisGame {
             }
         }
 
-        // Overlays
         if (this.state === 'menu') {
             this._drawOverlay('TETRIS', 'Press SPACE to start');
         } else if (this.state === 'paused') {
@@ -527,24 +490,18 @@ export default class TetrisGame {
         }
     }
 
+    // === Public API ===
+
     start() {
-        this.lastTime = performance.now();
-        const loop = (timestamp) => {
-            const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05);
-            this.lastTime = timestamp;
-            this.update(dt);
-            this.render();
-            this.rafId = requestAnimationFrame(loop);
-        };
-        this.rafId = requestAnimationFrame(loop);
+        this.loop.start();
     }
 
     stop() {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-        }
-        document.removeEventListener('keydown', this._onKeyDown);
-        document.removeEventListener('keyup', this._onKeyUp);
+        this.loop.stop();
+        this.input.destroy();
     }
 }
+
+// Auto-start when loaded in the build pipeline
+const game = new TetrisGame();
+game.start();

@@ -2,6 +2,7 @@ import { createWorkspace, getWorkspace } from '@/lib/workspace/manager';
 import { createAgent } from '@/lib/agent/factory';
 import type { AgentSession } from '@/lib/agent/types';
 import { readScaffoldDocs, getGotchas } from '@/lib/scaffold/reader';
+import { agentSessions, appendToJsonl, readJsonl, jsonlExists } from '@/lib/session-store';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -13,6 +14,7 @@ const ALLOWED_PROVIDERS = new Set(['deepseek', 'openai', 'claude']);
 interface ChatRequest {
   sessionId: string;
   message: string;
+  stream?: boolean;
   config: {
     provider: string;
     apiKey: string;
@@ -21,7 +23,68 @@ interface ChatRequest {
   };
 }
 
-const agentSessions = new Map<string, AgentSession>();
+async function handleStreamingResponse(
+  agent: AgentSession,
+  message: string,
+  sessionId: string,
+): Promise<Response> {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      };
+
+      try {
+        await agent.sendMessageStream(message, (event) => {
+          if (event.type === 'tool_result' && event.name === 'build_game') {
+            const workspace = getWorkspace(sessionId);
+            if (workspace) {
+              const outputPath = path.join(
+                workspace.workspacePath,
+                'output',
+                'index.html',
+              );
+              fs.access(outputPath)
+                .then(() => {
+                  send({
+                    type: 'build_result',
+                    previewUrl: `/api/preview/${sessionId}`,
+                    success: true,
+                  });
+                })
+                .catch(() => {
+                  send({
+                    type: 'build_result',
+                    previewUrl: `/api/preview/${sessionId}`,
+                    success: false,
+                  });
+                });
+            }
+          }
+          send(event);
+        });
+        appendToJsonl(sessionId, agent.getHistory());
+      } catch (error) {
+        send({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Internal server error',
+        });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  });
+}
 
 export async function POST(request: Request) {
   let config: ChatRequest['config'] | undefined;
@@ -54,7 +117,7 @@ export async function POST(request: Request) {
     }
 
     // Validate provider at runtime
-    if (config.provider && !ALLOWED_PROVIDERS.has(config.provider)) {
+    if (config.provider && !ALLOWED_PROVIDERS.has(config.provider.toLowerCase())) {
       return Response.json(
         { error: `Unsupported provider: "${config.provider}"` },
         { status: 400 },
@@ -71,6 +134,10 @@ export async function POST(request: Request) {
 
       const parts: string[] = [
         'You are an expert HTML5 game developer. You create games using pure Canvas and JavaScript.',
+        'The canvas is already created with id="gameCanvas" — use document.getElementById("gameCanvas") to access it. Do NOT create a new canvas element.',
+        'The HTML has no canvas width/height. YOU MUST set canvas.width and canvas.height in your JavaScript code — default is 300x150.',
+        'Use setupCanvas("gameCanvas", 800, 600) from utils.js or set them manually.',
+        'Files in assets/ are embedded as base64 at build time. Access them via window.__ASSETS__[filename].',
       ];
 
       if (gotchas) {
@@ -85,21 +152,37 @@ export async function POST(request: Request) {
       }
 
       parts.push(
-        '\n\nWhen the user asks for a game, generate the code in scripts/game.js using the patterns from the scaffold. After writing code, always call build_game tool. If you encounter issues, use set_error. Keep responses concise.',
+        '\n\nWhen the user asks for a game, generate the code in scripts/game.js using the patterns from the scaffold.',
+        '\n\nCRITICAL: scripts/utils.js is pre-loaded in the same module scope before game.js.',
+        'All exported classes (GameLoop, InputManager, CollisionDetector, SpriteManager, Animation, SoundManager, ObjectPool) and functions (randomInt, clamp, lerp, distance, angleBetween, setupCanvas) are already available — use them directly.',
+        'Do NOT redeclare, re-export, or copy utility code into game.js. This causes "Identifier has already been declared" errors.',
+        '\nYou MAY append new export functions/classes to the END of scripts/utils.js to extend the library. After adding functions, update lib/index.md to document them.',
+        '\nAfter writing code, always call build_game. If build_game reports errors, read the output, fix the code, and rebuild. Use set_error only for unrecoverable issues. After building, briefly describe the game features and how to play. Keep responses concise.',
       );
 
       let systemPrompt = parts.join('');
 
       const MAX_PROMPT_LENGTH = 30000;
       if (systemPrompt.length > MAX_PROMPT_LENGTH) {
+        const baseInstructions = parts.slice(0, 5).join('\n');
+        const finalInstructions = parts.slice(-5).join('\n');
         const gotchaSection = gotchas
-          ? '\n\n--- Known Gotchas ---\n' + gotchas + '\n'
+          ? '\n\n--- Known Gotchas ---\n' + gotchas
           : '';
         systemPrompt =
-          parts[0] +
+          baseInstructions +
           gotchaSection +
-          parts[parts.length - 1] +
+          '\n\n--- Final Instructions ---\n' +
+          finalInstructions +
           '\n\n[Game development guide truncated for length — read workspace/docs/ for full content if needed.]';
+      }
+
+      const agentMdPath = path.join(process.cwd(), 'workspace', 'agent.md');
+      try {
+        const agentMd = await fs.readFile(agentMdPath, 'utf-8');
+        systemPrompt += '\n\n' + agentMd;
+      } catch {
+        // agent.md not found — continue with existing prompt
       }
 
       agent = createAgent(
@@ -114,6 +197,15 @@ export async function POST(request: Request) {
       );
 
       agentSessions.set(sessionId, agent);
+
+      if (jsonlExists(sessionId)) {
+        const history = readJsonl(sessionId);
+        agent.loadHistory(history);
+      }
+    }
+
+    if (body.stream) {
+      return handleStreamingResponse(agent, message, sessionId);
     }
 
     const response = await agent.sendMessage(message);
@@ -142,6 +234,8 @@ export async function POST(request: Request) {
         }
       }
     }
+
+    appendToJsonl(sessionId, agent.getHistory());
 
     return Response.json({
       reply: response.message,

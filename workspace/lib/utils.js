@@ -1,6 +1,15 @@
 // ============================================================
 // Reusable Game Utilities — Pure HTML5 Canvas, no dependencies
 // ============================================================
+//
+// EXTENSIBLE: You may APPEND new `export function` or `export class`
+// at the bottom of this file. New exports are automatically available
+// in game.js scope (same module). After adding functions, update
+// lib/index.md to document them.
+//
+// WARNING: Do NOT modify or redeclare existing exports above.
+// Modifying existing exports may break games that depend on them.
+// ============================================================
 
 // --------------------- Math Utilities ------------------------
 
@@ -653,7 +662,7 @@ export class ObjectPool {
  * responsively within its container while maintaining aspect ratio.
  *
  * Usage:
- *   const canvas = setupCanvas('game', 800, 600);
+ *   const canvas = setupCanvas('gameCanvas', 800, 600);
  *   const ctx = canvas.getContext('2d');
  */
 export function setupCanvas(canvasId, designW = 800, designH = 600) {
@@ -680,4 +689,215 @@ export function setupCanvas(canvasId, designW = 800, designH = 600) {
     resize();
 
     return canvas;
+}
+
+// ============================================================
+// 2D Vector Math
+// ============================================================
+
+export class Vector2 {
+    constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+
+    set(x, y) { this.x = x; this.y = y; return this; }
+    copy() { return new Vector2(this.x, this.y); }
+    add(v) { this.x += v.x; this.y += v.y; return this; }
+    sub(v) { this.x -= v.x; this.y -= v.y; return this; }
+    scale(s) { this.x *= s; this.y *= s; return this; }
+    magnitude() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+    normalize() {
+        const mag = this.magnitude();
+        if (mag > 0) { this.x /= mag; this.y /= mag; }
+        return this;
+    }
+    rotate(angle) {
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        const x = this.x * cos - this.y * sin;
+        this.y = this.x * sin + this.y * cos;
+        this.x = x;
+        return this;
+    }
+    angle() { return Math.atan2(this.y, this.x); }
+    dot(v) { return this.x * v.x + this.y * v.y; }
+    distanceTo(v) { return distance(this.x, this.y, v.x, v.y); }
+
+    // Static helpers
+    static add(a, b) { return new Vector2(a.x + b.x, a.y + b.y); }
+    static sub(a, b) { return new Vector2(a.x - b.x, a.y - b.y); }
+    static scale(v, s) { return new Vector2(v.x * s, v.y * s); }
+    static fromAngle(angle, magnitude = 1) {
+        return new Vector2(Math.cos(angle) * magnitude, Math.sin(angle) * magnitude);
+    }
+}
+
+// ============================================================
+// 2D Camera — follow target with smooth lerp
+// ============================================================
+
+export class Camera {
+    constructor(worldW, worldH, viewW, viewH) {
+        this.x = 0; this.y = 0;
+        this.worldW = worldW; this.worldH = worldH;
+        this.viewW = viewW; this.viewH = viewH;
+        this.smoothFactor = 0.08;
+        this.deadzone = { x: 0, y: 0, w: viewW * 0.3, h: viewH * 0.3 };
+    }
+
+    follow(targetX, targetY, dt) {
+        const desiredX = targetX - this.viewW / 2;
+        const desiredY = targetY - this.viewH / 2;
+
+        if (Math.abs(this.x - desiredX) < this.deadzone.w / 2) {
+            // inside horizontal deadzone — no movement
+        } else {
+            this.x = lerp(this.x, desiredX, 1 - Math.pow(1 - this.smoothFactor, dt * 60));
+        }
+        if (Math.abs(this.y - desiredY) < this.deadzone.h / 2) {
+            // inside vertical deadzone
+        } else {
+            this.y = lerp(this.y, desiredY, 1 - Math.pow(1 - this.smoothFactor, dt * 60));
+        }
+
+        this.x = clamp(this.x, 0, Math.max(0, this.worldW - this.viewW));
+        this.y = clamp(this.y, 0, Math.max(0, this.worldH - this.viewH));
+    }
+
+    apply(ctx) {
+        ctx.save();
+        ctx.translate(-this.x, -this.y);
+    }
+
+    restore(ctx) { ctx.restore(); }
+
+    shake(intensity) {
+        const sx = (Math.random() - 0.5) * intensity * 2;
+        const sy = (Math.random() - 0.5) * intensity * 2;
+        this.x += sx;
+        this.y += sy;
+    }
+}
+
+// ============================================================
+// Timer / Cooldown
+// ============================================================
+
+export class Timer {
+    constructor(duration, autoReset = false) {
+        this.duration = duration;
+        this.elapsed = 0;
+        this.autoReset = autoReset;
+        this._done = false;
+    }
+
+    update(dt) {
+        if (this._done) return;
+        this.elapsed += dt;
+        if (this.elapsed >= this.duration) {
+            this._done = true;
+            if (this.autoReset) this.reset();
+        }
+    }
+
+    isDone() { return this._done; }
+    progress() { return clamp(this.elapsed / this.duration, 0, 1); }
+    remaining() { return Math.max(0, this.duration - this.elapsed); }
+
+    reset(newDuration) {
+        if (newDuration !== undefined) this.duration = newDuration;
+        this.elapsed = 0;
+        this._done = false;
+    }
+}
+
+// ============================================================
+// Easing Functions
+// ============================================================
+
+export const Easing = {
+    linear: (t) => t,
+
+    inQuad: (t) => t * t,
+    outQuad: (t) => t * (2 - t),
+    inOutQuad: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+
+    inCubic: (t) => t * t * t,
+    outCubic: (t) => (--t) * t * t + 1,
+    inOutCubic: (t) => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1,
+
+    inSine: (t) => 1 - Math.cos(t * Math.PI / 2),
+    outSine: (t) => Math.sin(t * Math.PI / 2),
+    inOutSine: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+
+    inElastic: (t) => {
+        if (t === 0 || t === 1) return t;
+        return -Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.075) * (2 * Math.PI) / 0.3);
+    },
+    outElastic: (t) => {
+        if (t === 0 || t === 1) return t;
+        return Math.pow(2, -10 * t) * Math.sin((t - 0.075) * (2 * Math.PI) / 0.3) + 1;
+    },
+    outBounce: (t) => {
+        if (t < 1 / 2.75) return 7.5625 * t * t;
+        if (t < 2 / 2.75) return 7.5625 * (t -= 1.5 / 2.75) * t + 0.75;
+        if (t < 2.5 / 2.75) return 7.5625 * (t -= 2.25 / 2.75) * t + 0.9375;
+        return 7.5625 * (t -= 2.625 / 2.75) * t + 0.984375;
+    },
+};
+
+// ============================================================
+// Screen Shake
+// ============================================================
+
+export class ScreenShake {
+    constructor() {
+        this.intensity = 0;
+        this.decay = 4;
+    }
+
+    trigger(intensity = 8, decay = 4) {
+        this.intensity = Math.max(this.intensity, intensity);
+        this.decay = decay;
+    }
+
+    update(dt) {
+        if (this.intensity <= 0.01) { this.intensity = 0; return; }
+        this.intensity *= Math.exp(-this.decay * dt);
+    }
+
+    apply(ctx) {
+        if (this.intensity <= 0) return;
+        const sx = (Math.random() - 0.5) * this.intensity * 2;
+        const sy = (Math.random() - 0.5) * this.intensity * 2;
+        ctx.save();
+        ctx.translate(sx, sy);
+    }
+
+    restore(ctx) {
+        if (this.intensity <= 0) return;
+        ctx.restore();
+    }
+}
+
+// ============================================================
+// Seeded Random Number Generator (Mulberry32)
+// For reproducible procedural generation
+// ============================================================
+
+export class SeededRandom {
+    constructor(seed = Date.now()) {
+        this.seed = seed;
+        this.state = seed;
+    }
+
+    next() {
+        let t = this.state += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+
+    range(min, max) {
+        return min + Math.floor(this.next() * (max - min + 1));
+    }
+
+    reset() { this.state = this.seed; }
 }

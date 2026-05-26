@@ -1,10 +1,9 @@
-// Breakout Game — Pure HTML5 Canvas
+// Breakout Game — Using utils.js GameLoop + InputManager
 // Paddle, ball physics, brick grid, score, lives, power-ups
 
 const DESIGN_W = 600;
 const DESIGN_H = 750;
 
-// Colors
 const COLORS = {
     bg: '#0f0f23',
     paddle: '#4ecca3',
@@ -25,7 +24,6 @@ const BRICK_COLS = 10;
 const BRICK_TOP = 60;
 const BALL_SPEED_BASE = 350;
 
-// Power-up types
 const POWERUP_TYPES = [
     { type: 'wide', color: '#e8d445', duration: 8, label: 'WIDE' },
     { type: 'slow', color: '#4580e8', duration: 6, label: 'SLOW' },
@@ -33,82 +31,31 @@ const POWERUP_TYPES = [
 ];
 
 export default class BreakoutGame {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        canvas.width = DESIGN_W;
-        canvas.height = DESIGN_H;
+    constructor() {
+        this.canvas = setupCanvas('gameCanvas', DESIGN_W, DESIGN_H);
+        this.ctx = this.canvas.getContext('2d');
+        this.input = new InputManager(this.canvas);
 
-        // Game state
         this.state = 'menu'; // menu | playing | paused | gameover | win
         this.score = 0;
         this.lives = 3;
         this.level = 1;
         this.highScore = parseInt(localStorage.getItem('breakoutHighScore') || '0');
 
-        // Paddle
         this.paddle = { x: 0, y: 0, w: PADDLE_W, h: PADDLE_H };
-
-        // Ball
         this.ball = { x: 0, y: 0, r: BALL_R, vx: 0, vy: 0, stuck: true };
-
-        // Bricks
         this.bricks = [];
-
-        // Power-ups
         this.powerups = [];
         this.activePowerups = {};
 
-        // Input
-        this.keys = {};
-        this.mouseX = DESIGN_W / 2;
-        this.mouseDown = false;
+        // Track previous mouse button state for click detection
+        this._prevMouseDown = false;
 
-        this._onKeyDown = (e) => {
-            this.keys[e.code] = true;
-            if (e.code === 'Space' || e.code === 'Enter') {
-                if (this.state === 'menu') this.startGame();
-                else if (this.state === 'gameover') this.startGame();
-                else if (this.state === 'win') this.nextLevel();
-                else if (this.state === 'playing' && this.ball.stuck) this.launchBall();
-            }
-            if (e.code === 'KeyP' && this.state === 'playing') this.state = 'paused';
-            else if (e.code === 'KeyP' && this.state === 'paused') this.state = 'playing';
-            if (['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
-        };
-        this._onKeyUp = (e) => { this.keys[e.code] = false; };
-        this._onMouseMove = (e) => {
-            const rect = canvas.getBoundingClientRect();
-            this.mouseX = (e.clientX - rect.left) * (DESIGN_W / rect.width);
-            this.mouseDown = e.buttons > 0;
-        };
-        this._onMouseDown = (e) => {
-            this.mouseDown = true;
-            if (this.state === 'menu') this.startGame();
-            else if (this.state === 'gameover') this.startGame();
-            else if (this.state === 'win') this.nextLevel();
-            else if (this.state === 'playing' && this.ball.stuck) this.launchBall();
-        };
-        this._onMouseUp = () => { this.mouseDown = false; };
-
-        document.addEventListener('keydown', this._onKeyDown);
-        document.addEventListener('keyup', this._onKeyUp);
-        canvas.addEventListener('mousemove', this._onMouseMove);
-        canvas.addEventListener('mousedown', this._onMouseDown);
-        canvas.addEventListener('mouseup', this._onMouseUp);
-
-        this._resize();
-        window.addEventListener('resize', () => this._resize());
-    }
-
-    _resize() {
-        const parent = this.canvas.parentElement;
-        if (!parent) return;
-        const maxW = parent.clientWidth || window.innerWidth;
-        const maxH = parent.clientHeight || window.innerHeight;
-        const scale = Math.min(maxW / DESIGN_W, maxH / DESIGN_H, 1);
-        this.canvas.style.width = `${DESIGN_W * scale}px`;
-        this.canvas.style.height = `${DESIGN_H * scale}px`;
+        this.loop = new GameLoop((dt) => {
+            this.update(dt);
+            this.render();
+            this.input.endFrame();
+        });
     }
 
     startGame() {
@@ -170,7 +117,7 @@ export default class BreakoutGame {
     }
 
     spawnPowerup(x, y) {
-        if (Math.random() > 0.2) return; // 20% chance
+        if (Math.random() > 0.2) return;
         const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
         this.powerups.push({
             x: x, y: y, w: 24, h: 14,
@@ -183,16 +130,40 @@ export default class BreakoutGame {
     }
 
     update(dt) {
+        if (this.input.justPressed('KeyP')) {
+            if (this.state === 'playing') { this.state = 'paused'; return; }
+            if (this.state === 'paused') { this.state = 'playing'; return; }
+        }
+
         if (this.state === 'paused') return;
-        if (this.state === 'menu' || this.state === 'gameover' || this.state === 'win') return;
 
-        // Update paddle position (mouse + keyboard)
-        let targetX = this.mouseX - this.paddle.w / 2;
-        if (this.keys['ArrowLeft']) targetX = this.paddle.x - 400 * dt;
-        if (this.keys['ArrowRight']) targetX = this.paddle.x + 400 * dt;
-        this.paddle.x = Math.max(0, Math.min(DESIGN_W - this.paddle.w, targetX));
+        // Handle state transitions via keyboard
+        if (this.input.justPressed('Space') || this.input.justPressed('Enter')) {
+            if (this.state === 'menu') { this.startGame(); return; }
+            if (this.state === 'gameover') { this.startGame(); return; }
+            if (this.state === 'win') { this.nextLevel(); return; }
+            if (this.state === 'playing' && this.ball.stuck) { this.launchBall(); return; }
+        }
 
-        // Update active powerup timers
+        // Handle mouse click for state transitions
+        const mouseDown = this.input.mouse.buttons[0] === true;
+        const mouseClicked = mouseDown && !this._prevMouseDown;
+        this._prevMouseDown = mouseDown;
+
+        if (mouseClicked) {
+            if (this.state === 'menu') { this.startGame(); return; }
+            if (this.state === 'gameover') { this.startGame(); return; }
+            if (this.state === 'win') { this.nextLevel(); return; }
+            if (this.state === 'playing' && this.ball.stuck) { this.launchBall(); return; }
+        }
+
+        if (this.state !== 'playing') return;
+
+        let targetX = this.input.mouse.x - this.paddle.w / 2;
+        if (this.input.isDown('ArrowLeft')) targetX = this.paddle.x - 400 * dt;
+        if (this.input.isDown('ArrowRight')) targetX = this.paddle.x + 400 * dt;
+        this.paddle.x = clamp(targetX, 0, DESIGN_W - this.paddle.w);
+
         for (const key of Object.keys(this.activePowerups)) {
             if (this.activePowerups[key].duration > 0) {
                 this.activePowerups[key].remaining -= dt;
@@ -202,7 +173,6 @@ export default class BreakoutGame {
             }
         }
 
-        // Current paddle width (accounting for wide powerup)
         const paddleW = this.activePowerups['wide'] ? PADDLE_W * 1.5 : PADDLE_W;
 
         // Ball update
@@ -212,7 +182,6 @@ export default class BreakoutGame {
             return;
         }
 
-        // Slow powerup affects ball speed
         const speedMultiplier = this.activePowerups['slow'] ? 0.6 : 1;
 
         this.ball.x += this.ball.vx * speedMultiplier * dt;
@@ -242,9 +211,8 @@ export default class BreakoutGame {
             this.ball.x >= this.paddle.x - this.ball.r &&
             this.ball.x <= this.paddle.x + paddleW + this.ball.r) {
 
-            // Angle based on where ball hits paddle
-            const hitPos = (this.ball.x - this.paddle.x) / paddleW; // 0..1
-            const angle = (hitPos - 0.5) * Math.PI * 0.75; // -67.5 to +67.5 degrees
+            const hitPos = (this.ball.x - this.paddle.x) / paddleW;
+            const angle = (hitPos - 0.5) * Math.PI * 0.75;
             const speed = Math.sqrt(this.ball.vx * this.ball.vx + this.ball.vy * this.ball.vy);
             this.ball.vx = Math.cos(angle) * speed;
             this.ball.vy = -Math.abs(Math.sin(angle) * speed);
@@ -255,7 +223,6 @@ export default class BreakoutGame {
         for (const brick of this.bricks) {
             if (!brick.alive) continue;
 
-            // AABB collision (ball vs brick)
             const nearX = Math.max(brick.x, Math.min(this.ball.x, brick.x + brick.w));
             const nearY = Math.max(brick.y, Math.min(this.ball.y, brick.y + brick.h));
             const dx = this.ball.x - nearX;
@@ -263,7 +230,6 @@ export default class BreakoutGame {
             const distSq = dx * dx + dy * dy;
 
             if (distSq < this.ball.r * this.ball.r) {
-                // Determine bounce direction
                 const overlapX = (this.ball.x < brick.x || this.ball.x > brick.x + brick.w);
                 if (overlapX) {
                     this.ball.vx *= -1;
@@ -280,7 +246,7 @@ export default class BreakoutGame {
                 } else {
                     this.score += 5;
                 }
-                break; // Only one brick collision per frame
+                break;
             }
         }
 
@@ -294,18 +260,15 @@ export default class BreakoutGame {
             const pu = this.powerups[i];
             pu.y += pu.vy * dt;
 
-            // Check catch by paddle
             if (pu.y + pu.h >= this.paddle.y &&
                 pu.y <= this.paddle.y + this.paddle.h &&
                 pu.x + pu.w >= this.paddle.x &&
                 pu.x <= this.paddle.x + paddleW) {
-
                 this.activatePowerup(pu);
                 this.powerups.splice(i, 1);
                 continue;
             }
 
-            // Remove if off screen
             if (pu.y > DESIGN_H) {
                 this.powerups.splice(i, 1);
             }
@@ -322,7 +285,6 @@ export default class BreakoutGame {
                     duration: POWERUP_TYPES[0].duration,
                     remaining: POWERUP_TYPES[0].duration
                 };
-                // Resize paddle visual
                 this.paddle.w = PADDLE_W * 1.5;
                 break;
             case 'slow':
@@ -351,7 +313,6 @@ export default class BreakoutGame {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, DESIGN_W, DESIGN_H);
 
-        // Background
         ctx.fillStyle = COLORS.bg;
         ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
 
@@ -361,11 +322,9 @@ export default class BreakoutGame {
             ctx.fillStyle = brick.color;
             ctx.fillRect(brick.x, brick.y, brick.w, brick.h);
 
-            // Lighter top edge for 3D effect
             ctx.fillStyle = 'rgba(255,255,255,0.15)';
             ctx.fillRect(brick.x, brick.y, brick.w, 3);
 
-            // Strength indicator
             if (brick.strength > 1) {
                 ctx.fillStyle = 'rgba(255,255,255,0.4)';
                 ctx.font = '10px monospace';
@@ -404,7 +363,6 @@ export default class BreakoutGame {
         ctx.textAlign = 'center';
         ctx.fillText(`Level ${this.level}`, DESIGN_W / 2, 20);
         ctx.textAlign = 'left';
-        // Draw lives (small balls)
         for (let i = 0; i < this.lives; i++) {
             ctx.beginPath();
             ctx.arc(20 + i * 20, 38, 4, 0, Math.PI * 2);
@@ -449,27 +407,18 @@ export default class BreakoutGame {
         ctx.fillText(subtitle, DESIGN_W / 2, DESIGN_H / 2 + 15);
     }
 
+    // === Public API ===
+
     start() {
-        this.lastTime = performance.now();
-        const loop = (timestamp) => {
-            const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05);
-            this.lastTime = timestamp;
-            this.update(dt);
-            this.render();
-            this.rafId = requestAnimationFrame(loop);
-        };
-        this.rafId = requestAnimationFrame(loop);
+        this.loop.start();
     }
 
     stop() {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-        }
-        document.removeEventListener('keydown', this._onKeyDown);
-        document.removeEventListener('keyup', this._onKeyUp);
-        this.canvas.removeEventListener('mousemove', this._onMouseMove);
-        this.canvas.removeEventListener('mousedown', this._onMouseDown);
-        this.canvas.removeEventListener('mouseup', this._onMouseUp);
+        this.loop.stop();
+        this.input.destroy();
     }
 }
+
+// Auto-start when loaded in the build pipeline
+const game = new BreakoutGame();
+game.start();

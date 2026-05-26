@@ -24,8 +24,8 @@ Agents MUST read scaffold docs before generating code. Scaffold is git-tracked a
 
 ### Build Pipeline (Build Pipeline)
 Takes `scripts/*.js` + `assets/*` → produces a single self-contained HTML file. Key behaviors:
-- Sorts scripts: utils.js first, then main.js/game.js, then alphabetical
-- Wraps code in IIFE unless code explicitly assigns to `window`
+  - Sorts scripts: utils.js first, then main.js/game.js, then alphabetical
+  - All scripts concatenated into a single `<script type="module">` block (shared module scope)
 - Embeds assets as base64 data URIs in `window.__ASSETS__`
 - Injects error handler and game-ready postMessage
 - Writes output to `workspace/output/index.html`
@@ -40,7 +40,7 @@ The agent's mechanism for interacting with the workspace. Six tools available:
 - `set_error` — reports unrecoverable errors to the user
 
 ### Game Preview (Game Preview)
-The right panel iframe that displays the built game. Sandboxed with `allow-scripts allow-same-origin`. Game errors are communicated back to the parent page via `postMessage` with `{ type: 'game-error', message, source, lineno, colno }`.
+The right panel iframe that displays the built game. Sandboxed with `allow-scripts` (no `allow-same-origin` — `postMessage` works cross-origin and `allow-same-origin` would leak access to parent DOM). Game errors are communicated back to the parent page via `postMessage` with `{ type: 'game-error', message, source, lineno, colno }`.
 
 ## Known Gaps (v2)
 

@@ -3,6 +3,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
 
+const USER_SPACE_DIR = path.join(process.cwd(), 'user_space');
+
 export async function GET(
   _request: Request,
   { params }: { params: { sessionId: string } },
@@ -10,24 +12,31 @@ export async function GET(
   try {
     const { sessionId } = params;
 
+    // Try in-memory Map first, then fall back to filesystem (Map may be
+    // wiped by Next.js HMR after code changes during dev)
+    let outputPath: string;
     const workspace = getWorkspace(sessionId);
-    if (!workspace) {
-      return new NextResponse('Session not found', { status: 404 });
+    if (workspace) {
+      outputPath = path.join(workspace.workspacePath, 'output', 'index.html');
+    } else {
+      outputPath = path.join(
+        USER_SPACE_DIR,
+        sessionId,
+        'output',
+        'index.html',
+      );
     }
-
-    const outputPath = path.join(
-      workspace.workspacePath,
-      'output',
-      'index.html',
-    );
 
     let html: string;
     try {
       html = await fs.readFile(outputPath, 'utf-8');
     } catch {
-      return new NextResponse('Build output not found. Run a build first.', {
-        status: 404,
-      });
+      if (workspace) {
+        return new NextResponse('Build output not found. Run a build first.', {
+          status: 404,
+        });
+      }
+      return new NextResponse('Session not found', { status: 404 });
     }
 
     return new NextResponse(html, {

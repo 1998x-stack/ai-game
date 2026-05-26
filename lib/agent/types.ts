@@ -29,6 +29,7 @@ export interface AgentMessage {
   content: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  reasoning_content?: string;
 }
 
 export interface AgentResponse {
@@ -37,8 +38,22 @@ export interface AgentResponse {
   finishReason: 'stop' | 'tool_calls' | 'length';
 }
 
+export type StreamEvent =
+  | { type: 'message'; content: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'tool_call'; name: string; arguments: Record<string, unknown> }
+  | { type: 'tool_result'; name: string; result: string; error?: string }
+  | { type: 'build_result'; previewUrl: string; success: boolean }
+  | { type: 'error'; message: string }
+  | { type: 'done' };
+
 export interface AgentSession {
   sendMessage(content: string): Promise<AgentResponse>;
+  sendMessageStream(
+    content: string,
+    onEvent: (event: StreamEvent) => void,
+  ): Promise<AgentResponse>;
   getHistory(): AgentMessage[];
+  loadHistory(messages: AgentMessage[]): void;
   reset(): void;
 }

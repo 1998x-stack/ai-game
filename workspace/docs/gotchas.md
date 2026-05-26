@@ -357,21 +357,21 @@ enemy.y = clamp(enemy.y, MARGIN, canvas.height - enemy.height - MARGIN);
 
 **Wrong:**
 ```html
-<canvas id="game" width="200" height="200" style="width: 800px; height: 800px;"></canvas>
+<canvas id="gameCanvas" width="200" height="200" style="width: 800px; height: 800px;"></canvas>
 <!-- Pixel art will appear blurry when scaled up -->
 ```
 
 **Correct:**
 ```html
 <style>
-    #game {
+    #gameCanvas {
         width: 800px;
         height: 800px;
         image-rendering: pixelated;
         image-rendering: crisp-edges; /* Fallback for older browsers */
     }
 </style>
-<canvas id="game" width="200" height="200"></canvas>
+<canvas id="gameCanvas" width="200" height="200"></canvas>
 ```
 
 Also apply to any `<img>` elements used for pixel-art sprites:
@@ -385,4 +385,331 @@ canvas, img[src*="sprite"], .pixel-art {
 For canvas 2D context, disable anti-aliasing for geometric shapes:
 ```js
 ctx.imageSmoothingEnabled = false; // Disable smoothing for drawImage
+```
+
+## 11. Do NOT Redeclare Scaffold Utilities
+
+**Problem**: `scripts/utils.js` is pre-loaded in the same module scope before `game.js`. It exports `GameLoop`, `InputManager`, `CollisionDetector`, `SpriteManager`, `Animation`, `SoundManager`, `ObjectPool`, and utility functions (`randomInt`, `clamp`, `lerp`, `distance`, `angleBetween`, `setupCanvas`). These are already available — redeclaring any of them in `game.js` causes `"Identifier has already been declared"` at runtime.
+
+**Wrong**:
+```js
+class GameLoop { // ❌ Already exported from utils.js — duplicate declaration error
+  constructor() { ... }
+}
+```
+
+**Correct**:
+```js
+const loop = new GameLoop((dt) => { // ✅ Use pre-loaded GameLoop directly
+  update(dt);
+  render();
+});
+loop.start();
+```
+
+---
+
+## 12. Canvas Must Set Width and Height
+
+**Description:** The HTML `<canvas>` element defaults to 300x150 pixels if width/height attributes are not set. Drawing outside this area or expecting a larger canvas will produce invisible results. The build output's canvas has NO width/height attributes — you MUST set them in JavaScript.
+
+**Wrong:**
+```js
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+// Canvas is still 300x150 — anything drawn at larger coordinates is invisible
+ctx.fillRect(400, 300, 50, 50); // Not visible!
+```
+
+**Correct:**
+```js
+const canvas = document.getElementById('gameCanvas');
+canvas.width = 800;
+canvas.height = 600;
+const ctx = canvas.getContext('2d');
+ctx.fillRect(400, 300, 50, 50); // Visible at (400, 300)
+```
+
+Or use the `setupCanvas` utility (already available from utils.js):
+```js
+const canvas = setupCanvas('gameCanvas', 800, 600);
+const ctx = canvas.getContext('2d');
+```
+
+---
+
+## 13. Do NOT Create a New Canvas Element
+
+**Description:** The build pipeline already includes `<canvas id="gameCanvas"></canvas>` in the HTML. Creating another canvas via `document.createElement` and appending it leaves TWO canvases — one blank and one with content. Always grab the existing canvas.
+
+**Wrong:**
+```js
+const canvas = document.createElement('canvas');
+document.body.appendChild(canvas);
+const ctx = canvas.getContext('2d');
+// Now there are two canvases — game appears on the new one, old one is blank
+```
+
+**Correct:**
+```js
+const canvas = document.getElementById('gameCanvas');
+canvas.width = 800;
+canvas.height = 600;
+const ctx = canvas.getContext('2d');
+```
+
+Or use the utility:
+```js
+const canvas = setupCanvas('gameCanvas', 800, 600);
+```
+
+---
+
+## 14. Module Scope — No IIFE Needed
+
+**Description:** All scripts run inside a single `<script type="module">`. Each script's top-level variables are module-scoped by default. Wrapping code in an IIFE `(function(){...})()` or using `'use strict'` is unnecessary and doesn't cause errors but clutters the code.
+
+**Wrong:**
+```js
+(function() {
+    'use strict';
+    const canvas = document.getElementById('gameCanvas');
+    // ... wrapped in unnecessary IIFE
+})();
+```
+
+**Correct:**
+```js
+// Top-level variables are module-scoped — no wrapper needed
+const canvas = document.getElementById('gameCanvas');
+canvas.width = 800;
+canvas.height = 600;
+const ctx = canvas.getContext('2d');
+```
+
+Note: `var` declarations do NOT create global properties inside modules either. Prefer `const` and `let`.
+
+---
+
+## 15. Do Not Use setInterval/setTimeout for Game Loops
+
+**Description:** `setInterval` and `setTimeout` do not synchronize with the display refresh rate, drift over time, and continue running when the tab is hidden. Always use `requestAnimationFrame` for game loops.
+
+**Wrong:**
+```js
+setInterval(() => {
+    update();
+    render();
+}, 1000 / 60);
+// Drifts, doesn't pause on tab hide, runs even when not visible
+```
+
+**Correct:**
+```js
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    update(dt);
+    render();
+    requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+```
+
+Or use the pre-loaded `GameLoop` class:
+```js
+const loop = new GameLoop((dt) => { update(dt); render(); });
+loop.start();
+```
+
+---
+
+## 16. Touch Events Need preventDefault
+
+**Description:** Without `e.preventDefault()` in touch event handlers, the browser interprets touch gestures as page scrolling or zooming. This causes the game canvas to scroll out of view and breaks game controls on mobile.
+
+**Wrong:**
+```js
+canvas.addEventListener('touchstart', (e) => {
+    // Page scrolls when user touches the canvas!
+    const touch = e.touches[0];
+    player.x = touch.clientX;
+});
+```
+
+**Correct:**
+```js
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault(); // Prevent scroll/zoom
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    player.x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+    player.y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+}, { passive: false }); // passive: false required for preventDefault
+
+// Also apply to touchmove:
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    // Update touch position...
+}, { passive: false });
+```
+
+---
+
+## 17. Game Loop Cleanup on Unload
+
+**Description:** When the game page is unloaded or the component unmounts, the requestAnimationFrame loop keeps running. This wastes CPU and can cause errors if the canvas is removed from the DOM. Always provide a cleanup function that removes event listeners and cancels the loop.
+
+**Wrong:**
+```js
+function start() {
+    requestAnimationFrame(function loop() {
+        update();
+        render();
+        requestAnimationFrame(loop);
+    });
+}
+// No way to stop — loop runs forever even after page unload
+```
+
+**Correct:**
+```js
+let rafId = null;
+let running = false;
+
+function start() {
+    if (running) return;
+    running = true;
+    lastTime = performance.now();
+    rafId = requestAnimationFrame(tick);
+}
+
+function tick(timestamp) {
+    if (!running) return;
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    update(dt);
+    render();
+    rafId = requestAnimationFrame(tick);
+}
+
+function stop() {
+    running = false;
+    if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+    }
+}
+
+// Clean up ALL event listeners
+function cleanup() {
+    stop();
+    document.removeEventListener('keydown', onKeyDown);
+    canvas.removeEventListener('mousemove', onMouseMove);
+    canvas.removeEventListener('touchstart', onTouchStart);
+}
+
+// Using GameLoop class (pre-loaded):
+// const loop = new GameLoop((dt) => { update(dt); render(); });
+// loop.start();
+// loop.stop(); // Handles rAF cancellation internally
+```
+
+---
+
+## 18. Use requestAnimationFrame Timestamp, Not performance.now()
+
+**Description:** The `requestAnimationFrame` callback receives a `DOMHighResTimeStamp` as its first argument. Use this timestamp for delta time calculations rather than calling `performance.now()` inside the loop, which adds an extra system call and can desync from the frame timing.
+
+**Wrong:**
+```js
+let lastTime = performance.now();
+function gameLoop() {
+    const now = performance.now();
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+    // Delta time may not align with actual frame boundaries
+    requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+```
+
+**Correct:**
+```js
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    update(dt);
+    render();
+    requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+// Note: first frame has lastTime=0, so delta may spike —
+// either ignore first frame or initialize lastTime from the first timestamp
+```
+
+---
+
+## 19. localStorage May Fail in Sandboxed Iframes
+
+**Description:** The game preview runs in a sandboxed iframe. If `allow-same-origin` is not set (it isn't — it's intentionally excluded for security), calling `localStorage.getItem()` or `localStorage.setItem()` throws a `SecurityError`. Always wrap localStorage access in try-catch.
+
+**Wrong:**
+```js
+let highScore = parseInt(localStorage.getItem('highScore') || '0');
+// Throws in sandboxed iframe: SecurityError: localStorage is not available
+```
+
+**Correct:**
+```js
+let highScore = 0;
+try {
+    const saved = localStorage.getItem('game_highScore');
+    highScore = saved ? parseInt(saved, 10) : 0;
+} catch (e) {
+    highScore = 0; // localStorage unavailable — game continues silently
+}
+
+function saveHighScore() {
+    if (score <= highScore) return;
+    highScore = score;
+    try {
+        localStorage.setItem('game_highScore', String(highScore));
+    } catch (e) {
+        // Silently fail — don't let localStorage errors break gameplay
+    }
+}
+```
+
+Prefix keys with your game name (e.g., `snake_highScore`) to avoid collisions if multiple games run in the same origin.
+
+---
+
+## 20. Canvas Context May Be Null
+
+**Description:** `canvas.getContext('2d')` returns `null` if the canvas element is not valid or if the context is lost (e.g., GPU driver reset, canvas transferred to a worker). Dereferencing `null` causes a `TypeError` that halts the entire game script.
+
+**Wrong:**
+```js
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#0f0'; // TypeError if ctx is null — game crashes
+```
+
+**Correct:**
+```js
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+if (!ctx) {
+    // Canvas context unavailable — show a fallback message
+    document.body.innerHTML = '<p>Game requires canvas support</p>';
+    throw new Error('Canvas 2D context unavailable');
+}
+ctx.fillStyle = '#0f0';
+
+// Or use setupCanvas which returns the canvas:
+const c = setupCanvas('gameCanvas', 800, 600);
+const ctx2 = c.getContext('2d');
+if (!ctx2) throw new Error('Canvas 2D context not supported');
 ```

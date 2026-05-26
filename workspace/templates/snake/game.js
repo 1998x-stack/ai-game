@@ -1,12 +1,12 @@
-// Snake Game — Pure HTML5 Canvas
-// Grid-based movement, keyboard controls, score tracking, difficulty scaling
+// Snake Game — Using utils.js GameLoop + InputManager
+// Grid-based movement, keyboard/swipe controls, score tracking, difficulty scaling
 
 const COLS = 20;
 const ROWS = 20;
-const TILE_SIZE = 20; // Base tile size in design resolution
+const TILE_SIZE = 20;
 const DESIGN_W = COLS * TILE_SIZE;
 const DESIGN_H = ROWS * TILE_SIZE;
-const MOVE_INTERVAL_BASE = 0.15; // Seconds between moves at starting speed
+const MOVE_INTERVAL_BASE = 0.15;
 
 const OPPOSITE = {
     'up': 'down',
@@ -16,78 +16,30 @@ const OPPOSITE = {
 };
 
 export default class SnakeGame {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-
-        // Responsive sizing: internal resolution fixed, CSS scales
-        canvas.width = DESIGN_W;
-        canvas.height = DESIGN_H;
+    constructor() {
+        this.canvas = setupCanvas('gameCanvas', DESIGN_W, DESIGN_H);
+        this.ctx = this.canvas.getContext('2d');
+        this.input = new InputManager(this.canvas);
 
         this.state = 'menu'; // menu | playing | gameover
         this.score = 0;
         this.highScore = parseInt(localStorage.getItem('snakeHighScore') || '0');
 
-        // Input tracking — buffer one pending direction per frame
-        this.keys = {};
+        // Direction buffer — one pending direction per tick (Gotcha #1)
         this.pendingDirection = null;
-
-        this._onKeyDown = (e) => {
-            this.keys[e.code] = true;
-            const dirMap = {
-                'ArrowUp': 'up', 'KeyW': 'up',
-                'ArrowDown': 'down', 'KeyS': 'down',
-                'ArrowLeft': 'left', 'KeyA': 'left',
-                'ArrowRight': 'right', 'KeyD': 'right'
-            };
-            const newDir = dirMap[e.code];
-            if (newDir && this.state === 'playing') {
-                // Gotcha #1: prevent 180-degree turn (check current + pending)
-                const currentDir = this.pendingDirection || this.direction;
-                if (newDir !== OPPOSITE[currentDir]) {
-                    this.pendingDirection = newDir;
-                }
-            }
-            if ((e.code === 'Space' || e.code === 'Enter') && this.state === 'menu') {
-                this.startGame();
-            }
-            if ((e.code === 'Space' || e.code === 'Enter') && this.state === 'gameover') {
-                this.startGame();
-            }
-            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
-                e.preventDefault();
-            }
-        };
-
-        this._onKeyUp = (e) => {
-            this.keys[e.code] = false;
-        };
-
-        document.addEventListener('keydown', this._onKeyDown);
-        document.addEventListener('keyup', this._onKeyUp);
-
-        // Responsive resize
-        this._resize();
-        window.addEventListener('resize', () => this._resize());
-
-        // Game loop state
-        this.lastTime = 0;
+        this.direction = 'right';
+        this.snake = [];
+        this.food = null;
         this.moveTimer = 0;
-        this.rafId = null;
-    }
 
-    _resize() {
-        const parent = this.canvas.parentElement;
-        if (!parent) return;
-        const maxW = parent.clientWidth || window.innerWidth;
-        const maxH = parent.clientHeight || window.innerHeight;
-        const scale = Math.min(maxW / DESIGN_W, maxH / DESIGN_H, 1);
-        this.canvas.style.width = `${DESIGN_W * scale}px`;
-        this.canvas.style.height = `${DESIGN_H * scale}px`;
+        this.loop = new GameLoop((dt) => {
+            this.update(dt);
+            this.render();
+            this.input.endFrame();
+        });
     }
 
     startGame() {
-        // Snake starts at center, moving right
         const startX = Math.floor(COLS / 4);
         const startY = Math.floor(ROWS / 2);
         this.snake = [
@@ -115,24 +67,57 @@ export default class SnakeGame {
             }
         }
         if (available.length === 0) {
-            // Snake fills the entire board — win condition
             this.state = 'gameover';
             this.food = null;
             return;
         }
-        this.food = available[Math.floor(Math.random() * available.length)];
+        this.food = available[randomInt(0, available.length - 1)];
     }
 
     getMoveInterval() {
         // Gotcha #8: speed increases with score (difficulty scaling)
-        const speedFactor = Math.min(this.score * 0.02, 0.7); // Cap speed increase
+        const speedFactor = Math.min(this.score * 0.02, 0.7);
         return MOVE_INTERVAL_BASE * (1 - speedFactor);
     }
 
     update(dt) {
-        if (this.state !== 'playing') return;
+        if (this.state === 'menu') {
+            if (this.input.justPressed('Space') || this.input.justPressed('Enter')) {
+                this.startGame();
+            }
+            return;
+        }
+        if (this.state === 'gameover') {
+            if (this.input.justPressed('Space') || this.input.justPressed('Enter')) {
+                this.startGame();
+            }
+            return;
+        }
 
-        // Apply deferred directions (Gotcha #1)
+        // Handle direction input via keyboard (with 180-degree turn prevention)
+        let newDir = null;
+        if (this.input.justPressed('ArrowUp') || this.input.justPressed('KeyW')) newDir = 'up';
+        else if (this.input.justPressed('ArrowDown') || this.input.justPressed('KeyS')) newDir = 'down';
+        else if (this.input.justPressed('ArrowLeft') || this.input.justPressed('KeyA')) newDir = 'left';
+        else if (this.input.justPressed('ArrowRight') || this.input.justPressed('KeyD')) newDir = 'right';
+
+        if (newDir) {
+            const currentDir = this.pendingDirection || this.direction;
+            if (newDir !== OPPOSITE[currentDir]) {
+                this.pendingDirection = newDir;
+            }
+        }
+
+        // Handle swipe input
+        const swipe = this.input.getSwipe();
+        if (swipe) {
+            const currentDir = this.pendingDirection || this.direction;
+            if (swipe !== OPPOSITE[currentDir]) {
+                this.pendingDirection = swipe;
+            }
+        }
+
+        // Apply deferred directions
         if (this.pendingDirection) {
             this.direction = this.pendingDirection;
             this.pendingDirection = null;
@@ -180,9 +165,8 @@ export default class SnakeGame {
                 this.highScore = this.score;
             }
             this.spawnFood();
-            // Do NOT remove tail — snake grows
         } else {
-            this.snake.pop(); // Remove tail
+            this.snake.pop();
         }
     }
 
@@ -195,7 +179,6 @@ export default class SnakeGame {
     render() {
         const ctx = this.ctx;
 
-        // Gotcha #4: clear canvas before each frame
         ctx.clearRect(0, 0, DESIGN_W, DESIGN_H);
 
         // Background
@@ -304,30 +287,18 @@ export default class SnakeGame {
         ctx.fillText(subtitle, DESIGN_W / 2, DESIGN_H / 2 + 15);
     }
 
-    // === Public API for the game loop ===
+    // === Public API ===
 
     start() {
-        this.lastTime = performance.now();
-        const loop = (timestamp) => {
-            // Gotcha #3: use delta time
-            const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05);
-            this.lastTime = timestamp;
-
-            this.update(dt);
-            this.render();
-
-            this.rafId = requestAnimationFrame(loop);
-        };
-        this.rafId = requestAnimationFrame(loop);
+        this.loop.start();
     }
 
     stop() {
-        // Gotcha #6: cancel rAF on cleanup
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-        }
-        document.removeEventListener('keydown', this._onKeyDown);
-        document.removeEventListener('keyup', this._onKeyUp);
+        this.loop.stop();
+        this.input.destroy();
     }
 }
+
+// Auto-start when loaded in the build pipeline
+const game = new SnakeGame();
+game.start();

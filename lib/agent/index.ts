@@ -5,6 +5,7 @@ export type {
   ToolResult,
   AgentMessage,
   AgentResponse,
+  StreamEvent,
   AgentSession,
 } from './types';
 

@@ -53,7 +53,7 @@ function escapeJsStr(s: string): string {
 }
 
 function buildMinimalHtml(): string {
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AI Game</title><style>body{margin:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body><canvas id="gameCanvas"></canvas><script>window.parent.postMessage({type:\'game-ready\'},\'*\');</script></body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AI Game</title><style>body{margin:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body><canvas id="gameCanvas"></canvas><script type="module">window.parent.postMessage({type:\'game-ready\'},\'*\');</script></body></html>';
 }
 
 function writeFallbackOutput(outputDir: string, error: string): { html: string; outputPath: string; errors: string[] } {
@@ -114,15 +114,12 @@ export function buildGame(workspacePath: string): { html: string; outputPath: st
   } catch { /* assets/ missing is fine */ }
 
   const allCode = scripts.map(s => s.content).join('\n');
-  const useIIFE = !assignsToWindow(allCode);
 
-  let gameScriptBlock: string;
-  if (useIIFE) {
-    gameScriptBlock = `(function(){\n${allCode}\n})();`;
-  } else {
-    gameScriptBlock = allCode;
-    gameScriptBlock += `\nif(typeof startGame==='function')startGame();`;
-  }
+  const gameScriptBlock =
+    allCode +
+    (assignsToWindow(allCode)
+      ? `\nif(typeof startGame==='function')startGame();`
+      : '');
 
   let assetScriptBlock = '';
   if (assetMap.length > 0) {
@@ -131,8 +128,8 @@ export function buildGame(workspacePath: string): { html: string; outputPath: st
   }
 
   const errorScript = '<script>window.addEventListener(\'error\',function(e){window.parent.postMessage({type:\'game-error\',message:e.message,source:e.filename,lineno:e.lineno,colno:e.colno},\'*\')});</script>';
-  const readyScript = '<script>window.parent.postMessage({type:\'game-ready\'},\'*\');</script>';
-  const initScript = assetScriptBlock + '<script>' + gameScriptBlock + '</script>';
+  const readyScript = '<script type="module">window.parent.postMessage({type:\'game-ready\'},\'*\');</script>';
+  const initScript = assetScriptBlock + '<script type="module">' + gameScriptBlock + '</script>';
 
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AI Game</title><style>body{margin:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body><canvas id="gameCanvas"></canvas>' + errorScript + initScript + readyScript + '</body></html>';
 
