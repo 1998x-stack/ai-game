@@ -1,5 +1,6 @@
 import { mkdir, cp, rm } from 'fs/promises';
 import * as path from 'path';
+import { CONFIG } from '@/lib/config';
 
 const BASE_WORKSPACE_PATH = path.join(process.cwd(), 'user_space');
 const SCAFFOLD_PATH = path.join(process.cwd(), 'workspace');
@@ -13,10 +14,8 @@ export interface WorkspaceSession {
 
 const sessions = new Map<string, WorkspaceSession>();
 
-const MAX_ACTIVE_SESSIONS = 100;
-
 export async function createWorkspace(sessionId: string): Promise<WorkspaceSession> {
-  if (sessions.size >= MAX_ACTIVE_SESSIONS) {
+  if (sessions.size >= CONFIG.workspace.maxActiveSessions) {
     const oldest = [...sessions.entries()].sort(
       (a, b) => a[1].lastActiveAt.getTime() - b[1].lastActiveAt.getTime(),
     )[0];
@@ -63,7 +62,7 @@ export async function deleteWorkspace(sessionId: string): Promise<boolean> {
   return true;
 }
 
-export async function cleanupStaleWorkspaces(maxAgeMs: number = 3600000): Promise<number> {
+export async function cleanupStaleWorkspaces(maxAgeMs: number = CONFIG.workspace.staleCleanupMs): Promise<number> {
   const cutoff = Date.now() - maxAgeMs;
 
   const stale: string[] = [];

@@ -1,5 +1,6 @@
 import type { AgentSession, AgentMessage } from '@/lib/agent';
-import fs from 'fs';
+import { mkdir, appendFile, readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
 
 export const agentSessions = new Map<string, AgentSession>();
@@ -10,24 +11,24 @@ function jsonlPath(sessionId: string): string {
   return path.join(USER_SPACE_DIR, sessionId, 'session.jsonl');
 }
 
-export function appendToJsonl(
+export async function appendToJsonl(
   sessionId: string,
   messages: AgentMessage[],
-): void {
+): Promise<void> {
   const lines = messages
     .filter((m) => m.role !== 'system')
     .map((m) => JSON.stringify(m));
   if (lines.length === 0) return;
 
   const filePath = jsonlPath(sessionId);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.appendFileSync(filePath, lines.join('\n') + '\n', 'utf-8');
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await appendFile(filePath, lines.join('\n') + '\n', 'utf-8');
 }
 
-export function readJsonl(sessionId: string): AgentMessage[] {
+export async function readJsonl(sessionId: string): Promise<AgentMessage[]> {
   const filePath = jsonlPath(sessionId);
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
     return content
       .split('\n')
       .filter((line) => line.trim())
@@ -38,5 +39,5 @@ export function readJsonl(sessionId: string): AgentMessage[] {
 }
 
 export function jsonlExists(sessionId: string): boolean {
-  return fs.existsSync(jsonlPath(sessionId));
+  return existsSync(jsonlPath(sessionId));
 }

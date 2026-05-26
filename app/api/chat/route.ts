@@ -137,7 +137,7 @@ async function handleStreamingResponse(
 
           send(event);
         });
-        appendToJsonl(sessionId, agent.getHistory());
+        await appendToJsonl(sessionId, agent.getHistory());
       } catch (error) {
         send({
           type: 'error',
@@ -272,7 +272,7 @@ export async function POST(request: Request) {
       agentSessions.set(sessionId, agent);
 
       if (jsonlExists(sessionId)) {
-        const history = readJsonl(sessionId);
+        const history = await readJsonl(sessionId);
         agent.loadHistory(history);
       }
     }
@@ -308,7 +308,7 @@ export async function POST(request: Request) {
       }
     }
 
-    appendToJsonl(sessionId, agent.getHistory());
+    await appendToJsonl(sessionId, agent.getHistory());
 
     return Response.json({
       reply: response.message,

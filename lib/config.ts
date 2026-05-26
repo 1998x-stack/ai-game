@@ -50,12 +50,18 @@ export const CONFIG = {
 
   // ── Providers ──
   providers: {
-    allowed: new Set(['deepseek', 'openai', 'claude']),
+    allowed: Object.freeze(new Set(['deepseek', 'openai', 'claude'])),
     deepseek: {
       defaultBaseUrl: 'https://api.deepseek.com',
       defaultModel: 'deepseek-v4-pro',
       fallbackModel: 'deepseek-v4-flash',
     },
+  },
+
+  // ── Workspace ──
+  workspace: {
+    maxActiveSessions: 100,
+    staleCleanupMs: 3_600_000, // 1 hour
   },
 
   // ── Validation ──

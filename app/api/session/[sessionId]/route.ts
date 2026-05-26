@@ -37,7 +37,7 @@ export async function GET(
   }
 
   const history = jsonlExists(sessionId)
-    ? readJsonl(sessionId)
+    ? await readJsonl(sessionId)
     : (agentSessions.get(sessionId)?.getHistory() ?? []);
 
   const messages = formatMessages(history);
