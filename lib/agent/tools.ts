@@ -12,6 +12,7 @@ import { analyzeGame } from '@/lib/runtime/analyzer';
 import { generateTestScenario, type TestAction } from '@/lib/runtime/test-engine';
 import { injectPerfMonitor, extractPerfMetrics } from '@/lib/runtime/perf-monitor';
 import { generateTextReport } from '@/lib/runtime/report-generator';
+import { getBrowserPool } from '@/lib/runtime/browser-pool';
 
 function validatePath(userPath: string, workspaceRoot: string): string {
   if (userPath.includes('..')) {
@@ -873,9 +874,12 @@ async function gameRuntimeHandler(
   const startTime = Date.now();
 
   let browser;
+  let poolId: string | undefined;
   try {
-    browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
+    const pooled = await getBrowserPool().acquire();
+    browser = pooled.browser;
+    const page = pooled.page;
+    poolId = pooled.id;
     await page.setContent(html);
 
     // Inject performance monitor
@@ -1005,7 +1009,7 @@ async function gameRuntimeHandler(
     const msg = err instanceof Error ? err.message : String(err);
     return `RUNTIME ERROR: ${msg}. The game may have crashed during testing.`;
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    if (poolId) getBrowserPool().release(poolId);
   }
 }
 

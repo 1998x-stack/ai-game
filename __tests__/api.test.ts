@@ -126,6 +126,7 @@ import fs from 'fs';
 import OpenAI from 'openai';
 import { chromium } from 'playwright';
 import { toolRegistry } from '@/lib/agent/tools';
+import { resetBrowserPool } from '@/lib/runtime/browser-pool';
 import type { AgentConfig } from '@/lib/agent/types';
 
 // ---------------------------------------------------------------------------
@@ -1614,6 +1615,7 @@ describe('game_runtime handler', () => {
 
   beforeEach(() => {
     handler = getHandler('game_runtime');
+    resetBrowserPool();
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(
       '<!DOCTYPE html><html><canvas id="gameCanvas"></canvas></html>',
