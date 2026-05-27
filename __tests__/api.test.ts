@@ -1714,6 +1714,6 @@ describe('game_runtime handler', () => {
       TEST_AGENT_CONFIG,
     );
 
-    expect(result).toContain('zero dimensions');
+    expect(result).toContain('Canvas dimensions are zero');
   });
 });

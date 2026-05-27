@@ -746,6 +746,56 @@ async function extractGameState(page: any): Promise<Record<string, unknown>> {
   });
 }
 
+interface RuntimeIssue {
+  id: string;
+  severity: 'error' | 'warning' | 'info';
+  category: string;
+  title: string;
+  description: string;
+  fixSuggestion: string;
+}
+
+function runDetectionRules(
+  finalState: Record<string, unknown>,
+  stateHistory: Record<string, unknown>[],
+): RuntimeIssue[] {
+  const issues: RuntimeIssue[] = [];
+
+  const canvas = finalState._canvas as { width: number; height: number } | undefined;
+  if (!canvas || canvas.width === 0 || canvas.height === 0) {
+    issues.push({
+      id: 'zero-canvas', severity: 'error', category: 'rendering',
+      title: 'Canvas dimensions are zero',
+      description: 'Canvas width/height is 0. Game may not render properly.',
+      fixSuggestion: 'Use setupCanvas("gameCanvas", 800, 600) or set canvas.width/height manually.',
+    });
+  }
+
+  const scoreVals = stateHistory
+    .map(s => parseFloat(String((s as any).score || s.score || '0')))
+    .filter(v => !isNaN(v));
+  if (scoreVals.length > 1 && scoreVals.every(v => v === scoreVals[0])) {
+    issues.push({
+      id: 'stagnant-score', severity: 'warning', category: 'game-logic',
+      title: 'Score unchanged throughout test',
+      description: 'Score remained constant across all test steps. Scoring logic may not be working.',
+      fixSuggestion: 'Ensure score increments on game events (food collection, enemy destruction, etc.).',
+    });
+  }
+
+  const goKeys = ['gameOver', 'gameover', 'isGameOver'];
+  if (goKeys.every(k => finalState[k] !== 'true' && finalState[k] !== true) && stateHistory.length > 0) {
+    issues.push({
+      id: 'no-game-over', severity: 'info', category: 'game-logic',
+      title: 'Game over not triggered',
+      description: 'Game did not trigger a game-over state during the test. This may be normal.',
+      fixSuggestion: 'If the game should have ended during the test, verify game-over conditions.',
+    });
+  }
+
+  return issues;
+}
+
 async function gameRuntimeHandler(
   args: Record<string, unknown>,
   root: string,
@@ -775,6 +825,7 @@ async function gameRuntimeHandler(
 
   const testReport: string[] = [];
   const issues: string[] = [];
+  const stateHistory: Record<string, unknown>[] = [];
 
   let browser;
   try {
@@ -793,6 +844,7 @@ async function gameRuntimeHandler(
 
     for (let step = 0; step < maxSteps; step++) {
       const state = await extractGameState(page);
+      stateHistory.push(state);
 
       const stateText = Object.entries(state)
         .map(([k, v]) => `${k}: ${v}`)
@@ -859,24 +911,9 @@ async function gameRuntimeHandler(
     // Final analysis
     const finalState = await extractGameState(page);
 
-    if (
-      finalState.gameOver !== 'true' &&
-      finalState.gameover !== 'true' &&
-      finalState.isGameOver !== 'true'
-    ) {
-      testReport.push(
-        `Game did not trigger game-over after ${maxSteps} steps. This may be normal for some games.`,
-      );
-    }
-
-    // Check for edge-case issues
-    const canvasInfo = finalState._canvas as { width: number; height: number } | undefined;
-    if (canvasInfo && (canvasInfo.width === 0 || canvasInfo.height === 0)) {
-      issues.push('Canvas has zero dimensions — check canvas.width/height setup.');
-    }
-
-    if (finalState.score === '0' || finalState.score === 0) {
-      issues.push('Score remained 0 throughout the test — verify scoring logic.');
+    const runtimeIssues = runDetectionRules(finalState, stateHistory);
+    for (const ri of runtimeIssues) {
+      issues.push(`[${ri.severity.toUpperCase()}] ${ri.category}: ${ri.title} — ${ri.fixSuggestion}`);
     }
 
   } catch (err: unknown) {
