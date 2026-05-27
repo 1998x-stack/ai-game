@@ -8,6 +8,10 @@ import { buildGame } from '@/lib/build/packager';
 import { CONFIG } from '@/lib/config';
 import { gitLog, gitDiff, gitDiffStaged, gitStatus } from '@/lib/git';
 import { githubPush } from '@/lib/github';
+import { analyzeGame } from '@/lib/runtime/analyzer';
+import { generateTestScenario, type TestAction } from '@/lib/runtime/test-engine';
+import { injectPerfMonitor, extractPerfMetrics } from '@/lib/runtime/perf-monitor';
+import { generateTextReport } from '@/lib/runtime/report-generator';
 
 function validatePath(userPath: string, workspaceRoot: string): string {
   if (userPath.includes('..')) {
@@ -796,6 +800,35 @@ function runDetectionRules(
   return issues;
 }
 
+async function executeAction(page: any, action: TestAction): Promise<void> {
+  switch (action.type) {
+    case 'keyboard':
+      await page.keyboard.press(action.key);
+      break;
+    case 'keyboard_hold':
+      await page.keyboard.down(action.key);
+      await page.waitForTimeout(action.duration);
+      await page.keyboard.up(action.key);
+      break;
+    case 'mouse_click':
+      await page.mouse.click(action.x, action.y);
+      break;
+    case 'mouse_move':
+      await page.mouse.move(action.x, action.y);
+      break;
+    case 'touch_tap':
+      await page.evaluate(({ x, y }: { x: number; y: number }) => {
+        const c = document.getElementById('gameCanvas'); if (!c) return;
+        c.dispatchEvent(new TouchEvent('touchstart', { touches: [new Touch({ identifier: 0, target: c, clientX: x, clientY: y })] }));
+        c.dispatchEvent(new TouchEvent('touchend', { touches: [] }));
+      }, { x: action.x, y: action.y });
+      break;
+    case 'wait':
+      await page.waitForTimeout(action.duration);
+      break;
+  }
+}
+
 async function gameRuntimeHandler(
   args: Record<string, unknown>,
   root: string,
@@ -821,11 +854,23 @@ async function gameRuntimeHandler(
   }
 
   const html = fs.readFileSync(outputPath, 'utf-8');
+
+  // Analyze game code to determine test approach
+  const gameJsPath = path.join(root, 'scripts', 'game.js');
+  let analysis: ReturnType<typeof analyzeGame>;
+  try {
+    const gameCode = fs.readFileSync(gameJsPath, 'utf-8');
+    analysis = analyzeGame(gameCode);
+  } catch {
+    analysis = analyzeGame('');
+  }
+  const scenario = generateTestScenario(analysis);
+
   const fallbackModel = config.fallbackModel || CONFIG.providers.deepseek.fallbackModel;
 
   const testReport: string[] = [];
-  const issues: string[] = [];
   const stateHistory: Record<string, unknown>[] = [];
+  const startTime = Date.now();
 
   let browser;
   try {
@@ -833,88 +878,128 @@ async function gameRuntimeHandler(
     const page = await browser.newPage();
     await page.setContent(html);
 
+    // Inject performance monitor
+    await page.evaluate(injectPerfMonitor());
 
     // Wait for game to initialize
     await page.waitForTimeout(1000);
 
-    const client = new OpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseUrl || CONFIG.providers.deepseek.defaultBaseUrl,
-    });
+    if (scenario) {
+      // Layer 2: Pre-defined test scenario for known game types
+      for (let i = 0; i < scenario.actions.length; i++) {
+        const action = scenario.actions[i];
+        await executeAction(page, action);
 
-    for (let step = 0; step < maxSteps; step++) {
-      const state = await extractGameState(page);
-      stateHistory.push(state);
+        const state = await extractGameState(page);
+        stateHistory.push(state);
 
-      const stateText = Object.entries(state)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join('\n');
+        if (
+          state.gameOver === 'true' ||
+          state.gameover === 'true' ||
+          state.isGameOver === 'true'
+        ) {
+          testReport.push(
+            `Step ${i + 1}: Game over detected. State: ${JSON.stringify(state)}`,
+          );
+          break;
+        }
 
-      // Check for game-over or edge conditions
-      if (
-        state.gameOver === 'true' ||
-        state.gameover === 'true' ||
-        state.isGameOver === 'true'
-      ) {
         testReport.push(
-          `Step ${step + 1}: Game over detected. State: ${JSON.stringify(state)}`,
+          `Step ${i + 1}: Action=${action.type}${action.type === 'keyboard' ? '(' + action.key + ')' : ''}`,
         );
-        break;
+
+        await page.waitForTimeout(stepDelay);
       }
+    } else {
+      // Layer 3: AI-driven test loop (fallback for unknown game types)
+      const client = new OpenAI({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl || CONFIG.providers.deepseek.defaultBaseUrl,
+      });
 
-      // Ask model for next action
-      let action = 'none';
-      try {
-        const response = await client.chat.completions.create({
-          model: fallbackModel,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are a game tester. Given the current game state, output ONLY a single keyboard key name (e.g., ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space) that would be the best next action for the game. No explanation, just the key name.',
-            },
-            {
-              role: 'user',
-              content: `Game state:\n${stateText}\n\nNext action (key name only):`,
-            },
-          ],
-          max_tokens: 10,
-          temperature: 0.3,
-        });
+      for (let step = 0; step < maxSteps; step++) {
+        const state = await extractGameState(page);
+        stateHistory.push(state);
 
-        action = (response.choices[0]?.message?.content || 'none').trim();
-        // Clean up any extra text
-        action = action.replace(/[^a-zA-Z]/g, '');
-      } catch {
+        const stateText = Object.entries(state)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('\n');
+
+        // Check for game-over or edge conditions
+        if (
+          state.gameOver === 'true' ||
+          state.gameover === 'true' ||
+          state.isGameOver === 'true'
+        ) {
+          testReport.push(
+            `Step ${step + 1}: Game over detected. State: ${JSON.stringify(state)}`,
+          );
+          break;
+        }
+
+        // Ask model for next action
+        let action = 'none';
+        try {
+          const response = await client.chat.completions.create({
+            model: fallbackModel,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You are a game tester. Given the current game state, output ONLY a single keyboard key name (e.g., ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space) that would be the best next action for the game. No explanation, just the key name.',
+              },
+              {
+                role: 'user',
+                content: `Game state:\n${stateText}\n\nNext action (key name only):`,
+              },
+            ],
+            max_tokens: 10,
+            temperature: 0.3,
+          });
+
+          action = (response.choices[0]?.message?.content || 'none').trim();
+          // Clean up any extra text
+          action = action.replace(/[^a-zA-Z]/g, '');
+        } catch {
+          testReport.push(
+            `Step ${step + 1}: Model API call failed, stopping test.`,
+          );
+          break;
+        }
+
+        if (action === 'none' || !action) {
+          testReport.push(
+            `Step ${step + 1}: Model returned no action, stopping.`,
+          );
+          break;
+        }
+
+        // Execute action
+        await page.keyboard.press(action);
         testReport.push(
-          `Step ${step + 1}: Model API call failed, stopping test.`,
+          `Step ${step + 1}: State keys=[${Object.keys(state).join(',')}] | Action=${action}`,
         );
-        break;
+
+        await page.waitForTimeout(stepDelay);
       }
-
-      if (action === 'none' || !action) {
-        testReport.push(
-          `Step ${step + 1}: Model returned no action, stopping.`,
-        );
-        break;
-      }
-
-      // Execute action
-      await page.keyboard.press(action);
-      testReport.push(
-        `Step ${step + 1}: State keys=[${Object.keys(state).join(',')}] | Action=${action}`,
-      );
-
-      await page.waitForTimeout(stepDelay);
     }
 
     // Final analysis
+    const perf = await extractPerfMetrics(page);
     const finalState = await extractGameState(page);
 
     const runtimeIssues = runDetectionRules(finalState, stateHistory);
-    for (const ri of runtimeIssues) {
-      issues.push(`[${ri.severity.toUpperCase()}] ${ri.category}: ${ri.title} — ${ri.fixSuggestion}`);
-    }
+
+    const durationSec = Math.round((Date.now() - startTime) / 1000);
+
+    return generateTextReport(
+      analysis,
+      runtimeIssues,
+      perf,
+      testReport.length,
+      fps,
+      durationSec,
+    );
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -922,22 +1007,6 @@ async function gameRuntimeHandler(
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
-
-  const report = [
-    `GAME RUNTIME TEST REPORT (${testReport.length} steps, ${fps} FPS)`,
-    '',
-    '--- Test Log ---',
-    ...testReport,
-    '',
-    issues.length > 0 ? '--- Issues Found ---' : '--- Issues Found ---\nNone detected.',
-    ...issues,
-    '',
-    issues.length > 0
-      ? 'Review the issues above and fix the game code. Then run build_game again to apply fixes.'
-      : 'No runtime issues detected. The game appears to handle basic interactions correctly.',
-  ].join('\n');
-
-  return report;
 }
 
 export const toolRegistry: ToolHandler[] = [

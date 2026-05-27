@@ -1663,10 +1663,13 @@ describe('game_runtime handler', () => {
 
   it('runs game test loop and returns report', async () => {
     // Mock state extraction: game running, then game over
+    // Additional evaluate calls: injectPerfMonitor + extractPerfMetrics
     mockPage.evaluate
+      .mockResolvedValueOnce(undefined) // injectPerfMonitor
       .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '0' }) // step 1
       .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '10' }) // step 2
       .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '10', gameOver: 'true' }) // step 3
+      .mockResolvedValueOnce(null) // extractPerfMetrics
       .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '10', gameOver: 'true' }); // final
 
     // Mock OpenAI calls for actions
@@ -1689,10 +1692,12 @@ describe('game_runtime handler', () => {
       TEST_AGENT_CONFIG,
     );
 
-    expect(result).toContain('GAME RUNTIME TEST REPORT');
-    expect(result).toContain('ArrowUp');
-    expect(result).toContain('ArrowRight');
-    expect(result).toContain('Game over detected');
+    // generateTextReport replaces manual report building
+    expect(result).toContain('GAME RUNTIME REPORT');
+    expect(result).toContain('3 steps');
+    expect(result).toContain('5 FPS');
+    expect(result).toContain('unknown');
+    expect(result).toContain('fallback');
   });
 
   it('handles browser crash gracefully', async () => {
@@ -1705,7 +1710,9 @@ describe('game_runtime handler', () => {
 
   it('detects zero canvas dimensions', async () => {
     mockPage.evaluate
+      .mockResolvedValueOnce(undefined) // injectPerfMonitor
       .mockResolvedValueOnce({ _canvas: { width: 0, height: 0 }, score: '0' }) // step 1
+      .mockResolvedValueOnce(null) // extractPerfMetrics
       .mockResolvedValueOnce({ _canvas: { width: 0, height: 0 }, score: '0' }); // final
 
     const result = await handler(
