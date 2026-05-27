@@ -21,6 +21,8 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
   buildResult?: boolean;
   reasoningContent?: string;
+  githubPushResult?: boolean;
+  githubPagesUrl?: string;
 }
 
 interface Props {
@@ -435,6 +437,26 @@ export default function ChatPanel({
                     {msg.buildResult && (
                       <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs animate-pulse">
                         🎮 Game ready! Play on the right →
+                      </div>
+                    )}
+
+                    {/* GitHub push success */}
+                    {msg.githubPushResult && msg.githubPagesUrl && (
+                      <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs">
+                        🌐 Published to{' '}
+                        <a
+                          href={msg.githubPagesUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-purple-300"
+                        >
+                          GitHub Pages
+                        </a>
+                      </div>
+                    )}
+                    {msg.githubPushResult !== undefined && !msg.githubPushResult && (
+                      <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+                        ❌ GitHub push failed. Check your token in Settings.
                       </div>
                     )}
                   </div>

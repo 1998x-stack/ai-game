@@ -8,6 +8,7 @@ export interface AppSettings {
   apiKey: string;
   model: string;
   baseUrl: string;
+  githubToken: string;
 }
 
 const STORAGE_KEY = 'ai-game-settings';
@@ -17,6 +18,7 @@ const defaultSettings: AppSettings = {
   apiKey: '',
   model: 'deepseek-v4-pro',
   baseUrl: 'https://api.deepseek.com',
+  githubToken: '',
 };
 
 interface Props {
@@ -28,6 +30,7 @@ interface Props {
 export default function SettingsModal({ open, onClose, onSave }: Props) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [showKey, setShowKey] = useState(false);
+  const [showGhToken, setShowGhToken] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -146,6 +149,30 @@ export default function SettingsModal({ open, onClose, onSave }: Props) {
                 {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+          </div>
+
+          {/* GitHub Token */}
+          <div>
+            <label className="block text-sm font-medium text-panel-text mb-1.5">
+              GitHub Token
+            </label>
+            <div className="relative">
+              <input
+                type={showGhToken ? 'text' : 'password'}
+                value={settings.githubToken}
+                onChange={(e) => update('githubToken', e.target.value)}
+                placeholder="ghp_..."
+                className="w-full bg-panel-surface border border-panel-border rounded px-3 py-2 pr-10 text-panel-text text-sm placeholder:text-panel-muted/60 focus:outline-none focus:ring-2 focus:ring-panel-accent/40 focus:border-panel-accent transition-shadow"
+              />
+              <button
+                onClick={() => setShowGhToken((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-panel-muted hover:text-panel-text transition-colors"
+                aria-label={showGhToken ? 'Hide GitHub token' : 'Show GitHub token'}
+              >
+                {showGhToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-panel-muted mt-1">Personal access token with "repo" scope for game publishing.</p>
           </div>
 
           {/* Model */}

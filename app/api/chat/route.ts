@@ -1,9 +1,10 @@
-import { createWorkspace, getWorkspace } from '@/lib/workspace/manager';
+import { createWorkspace, restoreWorkspace, getWorkspace } from '@/lib/workspace/manager';
 import { createAgent } from '@/lib/agent/factory';
 import type { AgentSession } from '@/lib/agent/types';
 import { readScaffoldDocs, getGotchas } from '@/lib/scaffold/reader';
 import { agentSessions, appendToJsonl, readJsonl, jsonlExists } from '@/lib/session-store';
 import { CONFIG } from '@/lib/config';
+import { gitCommit } from '@/lib/git';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -48,6 +49,7 @@ interface ChatRequest {
     apiKey: string;
     model: string;
     baseUrl: string;
+    githubToken?: string;
   };
 }
 
@@ -110,6 +112,8 @@ async function handleStreamingResponse(
                     previewUrl: `/api/preview/${sessionId}`,
                     success: true,
                   });
+                  // Auto-commit successful build for development history
+                  gitCommit(workspace.workspacePath, 'Build: game update');
                 })
                 .catch(() => {
                   send({
@@ -119,6 +123,29 @@ async function handleStreamingResponse(
                   });
                 });
             }
+          }
+
+          // Handle github_push results
+          if (event.type === 'tool_result' && event.name === 'github_push') {
+            send(event);
+            const resultMatch = event.result.match(/GITHUB PUSH SUCCESS/);
+            if (resultMatch) {
+              const repoMatch = event.result.match(/Repository: (https:\/\/github\.com\/[^\s]+)/);
+              const pagesMatch = event.result.match(/GitHub Pages: (https:\/\/[^\s]+)/);
+              send({
+                type: 'github_push_result',
+                success: true,
+                repoUrl: repoMatch?.[1],
+                pagesUrl: pagesMatch?.[1],
+              });
+            } else {
+              send({
+                type: 'github_push_result',
+                success: false,
+                error: event.result,
+              });
+            }
+            return;
           }
 
           // Emit todo_update after write_todo or edit_file on todo.md
@@ -199,7 +226,10 @@ export async function POST(request: Request) {
     let agent = agentSessions.get(sessionId);
 
     if (!agent) {
-      const workspace = await createWorkspace(sessionId);
+      const isRestoring = jsonlExists(sessionId);
+      const workspace = isRestoring
+        ? await restoreWorkspace(sessionId)
+        : await createWorkspace(sessionId);
 
       const docs = await readScaffoldDocs();
       const gotchas = await getGotchas();
@@ -233,6 +263,66 @@ export async function POST(request: Request) {
         '\nAfter writing code, always call build_game. If build_game reports errors, read the output, fix the code, and rebuild. Use set_error only for unrecoverable issues. After building, briefly describe the game features and how to play. Keep responses concise.',
       );
 
+      // Git: every successful build is auto-committed — use git_log/git_diff/git_status to inspect history
+      parts.push(
+        '\n\nEvery successful build is automatically committed to a git repository. Use git_log to see commit history, git_diff to see changes, and git_status to check the working tree. This helps you understand what changed between iterations.',
+      );
+
+      // GitHub: only mention publishing if a token is available
+      if (config.githubToken) {
+        parts.push(
+          '\n\nGitHub publishing is available via github_push. When the user asks to share or publish their game, call github_push after a successful build. This creates a repository, pushes the game, enables GitHub Pages, and returns a live URL. Do NOT call github_push unless explicitly asked.',
+        );
+      }
+
+      // Session restoration: inject workspace state summary so the agent can pick up where it left off
+      if (isRestoring) {
+        try {
+          const { execSync } = await import('child_process');
+          const gitLog = (() => {
+            try {
+              return execSync('git log --oneline -5', {
+                cwd: workspace.workspacePath,
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                timeout: 5000,
+              }).trim() || '(no commits)';
+            } catch {
+              return '(git unavailable)';
+            }
+          })();
+
+          const hasTodo = await fs
+            .access(path.join(workspace.workspacePath, 'todo.md'))
+            .then(() => true)
+            .catch(() => false);
+
+          const hasGameJs = await fs
+            .access(path.join(workspace.workspacePath, 'scripts', 'game.js'))
+            .then(() => true)
+            .catch(() => false);
+
+          const hasBuild = await fs
+            .access(path.join(workspace.workspacePath, 'output', 'index.html'))
+            .then(() => true)
+            .catch(() => false);
+
+          const summaryLines: string[] = [
+            '\n\n=== Session Restoration — Current Workspace State ===',
+            'You are resuming an existing game development session. Before making changes, orient yourself:',
+            hasGameJs ? '- A game exists at scripts/game.js — read it first to understand the current state.' : '- No game.js found — start fresh.',
+            hasBuild ? '- A build exists at output/index.html — the game was successfully built before.' : '',
+            hasTodo ? '- A todo.md exists with remaining tasks — read it to see what was planned.' : '',
+            `- Recent git history:\n${gitLog}`,
+            '\nIMPORTANT: Start by reading scripts/game.js to understand the current game code. Then read docs/gotchas.md. Do NOT restart from scratch or call write_todo to create a new plan unless the user explicitly asks for a new game.',
+          ];
+
+          parts.push(summaryLines.filter(Boolean).join('\n'));
+        } catch {
+          // If state reading fails, proceed without summary
+        }
+      }
+
       let systemPrompt = parts.join('');
 
       const MAX_PROMPT_LENGTH = CONFIG.agent.maxPromptLength;
@@ -264,6 +354,7 @@ export async function POST(request: Request) {
           apiKey: config.apiKey,
           model: config.model,
           baseUrl: config.baseUrl,
+          githubToken: config.githubToken,
         },
         systemPrompt,
         workspace.workspacePath,

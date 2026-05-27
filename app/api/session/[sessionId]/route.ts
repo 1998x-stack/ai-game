@@ -1,5 +1,6 @@
 import { agentSessions, readJsonl, jsonlExists } from '@/lib/session-store';
 import { getWorkspace } from '@/lib/workspace/manager';
+import { execSync } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
@@ -48,6 +49,10 @@ export async function GET(
 
   let gameUrl: string | null = null;
   let gameFiles: string[] = [];
+  let hasBuild = false;
+  let hasTodo = false;
+  let todoContent: string | null = null;
+  let gitPagesUrl: string | null = null;
 
   const wsPath = workspace?.workspacePath ??
     path.join(process.cwd(), 'user_space', sessionId);
@@ -55,6 +60,7 @@ export async function GET(
   try {
     await fs.access(outputPath);
     gameUrl = `/api/preview/${sessionId}`;
+    hasBuild = true;
   } catch {
     // not built yet
   }
@@ -65,6 +71,32 @@ export async function GET(
     gameFiles = files.filter((f) => f.endsWith('.js'));
   } catch {
     // no scripts yet
+  }
+
+  try {
+    const todoPath = path.join(wsPath, 'todo.md');
+    await fs.access(todoPath);
+    hasTodo = true;
+    todoContent = await fs.readFile(todoPath, 'utf-8');
+  } catch {
+    // no todo.md
+  }
+
+  try {
+    const remote = execSync('git remote get-url origin 2>/dev/null || true', {
+      cwd: wsPath,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 3000,
+    }).trim();
+    if (remote) {
+      const match = remote.match(/github\.com[:/](.+?)(?:\.git)?$/);
+      if (match) {
+        gitPagesUrl = `https://${match[1].split('/')[0]}.github.io/${match[1].split('/')[1]}`;
+      }
+    }
+  } catch {
+    // no git remote
   }
 
   let createdAt: string | null = workspace?.createdAt?.toISOString() ?? null;
@@ -87,5 +119,9 @@ export async function GET(
     gameFiles,
     messages,
     toolCalls,
+    hasBuild,
+    hasTodo,
+    todoContent,
+    gitPagesUrl,
   });
 }

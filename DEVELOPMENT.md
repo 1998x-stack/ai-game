@@ -207,6 +207,75 @@ The chat route reads `workspace/agent.md` and appends it to the system prompt af
 #### Stale Cleanup
 `cleanupStaleWorkspaces` uses `Promise.allSettled` to ensure one failed deletion doesn't block others.
 
+### Git / GitHub Integration Gotchas
+
+#### restoreWorkspace vs createWorkspace
+When re-creating an agent for an existing session (HMR, restart), use `restoreWorkspace()` — not `createWorkspace()`. The former detects an existing `scripts/game.js` on disk and skips scaffold recopy, preserving agent additions to `utils.js`, `gotchas.md`, and the git history. The latter would overwrite these with `cp --force`.
+
+```typescript
+// chat/route.ts — correct pattern
+const isRestoring = jsonlExists(sessionId);
+const workspace = isRestoring
+  ? await restoreWorkspace(sessionId)  // preserves existing files
+  : await createWorkspace(sessionId);  // fresh scaffold for new sessions
+```
+
+#### Tool Gating via Config
+`github_push` is conditionally exposed to the agent based on `config.githubToken`. `getOpenAITools(config)` filters it out when no token is configured. New conditional tools should follow this pattern:
+
+```typescript
+// tools.ts
+export function getOpenAITools(config?: AgentConfig) {
+  return getOpenAIToolsFiltered('master', config);
+}
+export function getOpenAIToolsFiltered(role, config?) {
+  return toolRegistry
+    .filter((t) => allowed.includes(t.definition.name))
+    .filter((t) => {
+      if (t.definition.name === 'github_push' && !config?.githubToken) return false;
+      return true;
+    })
+    .map(...)
+}
+```
+
+#### GitHub Token Flow
+The GitHub PAT flows: `SettingsModal (localStorage)` → `HomeContent (state)` → `POST /api/chat config.githubToken` → `AgentConfig.githubToken` → `githubPushHandler(root, config)`. The token is never stored server-side — matches existing BYO-Key architecture.
+
+#### `gh` CLI Auto-detection
+`lib/github.ts` checks `gh --version` before attempting CLI operations. If not installed, falls back to GitHub REST API via `fetch`. The `GH_TOKEN` env var is set per-process (not globally) for security.
+
+#### Git Auto-commit After Build
+In `app/api/chat/route.ts`, after a successful `build_game` tool result, `gitCommit(workspacePath, 'Build: game update')` is called. This is fire-and-forget — commit failures are silently ignored (the game still builds). The agent sees commits via `git_log`.
+
+### Session Recovery Patterns
+
+#### Workspace State Summary Injection
+When restoring a session (`jsonlExists` returns true), the system prompt is extended with a "Session Restoration" block. This tells the agent about existing `game.js`, build status, `todo.md`, and recent git history — preventing the agent from restarting from scratch.
+
+```typescript
+// chat/route.ts — after system prompt assembly, before createAgent
+if (isRestoring) {
+  const gitLog = execSync('git log --oneline -5', { cwd: workspacePath });
+  const hasGameJs = await fs.access(path.join(workspacePath, 'scripts', 'game.js')).then(() => true).catch(() => false);
+  const hasBuild = /* check output/index.html */;
+  const hasTodo = /* check todo.md */;
+  parts.push(`\n=== Session Restoration ===\n...${{ gitLog, hasGameJs, hasBuild, hasTodo }}\nDo NOT restart from scratch...`);
+}
+```
+
+#### UI State Reconstruction from Session API
+`GET /api/session/{id}` now returns `hasBuild`, `hasTodo`, `todoContent`, and `gitPagesUrl` in addition to `messages` and `gameUrl`. HomeContent reconstructs ephemeral UI state (`buildResult` badge, `todoUpdate` card, `githubRepoUrl`) from these fields. New state-dependent UI features must add their reconstruction to this effect.
+
+#### New Game from URL Guard
+The session restoration effect in HomeContent now compares `urlSessionId !== sessionId` instead of just checking param existence. This prevents the "New Game" button from triggering a 404 when `?session=` is in the URL.
+
+```typescript
+// HomeContent.tsx — correct guard
+const urlSessionId = params.get('session');
+if (!urlSessionId || urlSessionId !== sessionId) return; // skip if IDs don't match
+```
+
 ### Adding New Features
 
 #### New LLM Provider

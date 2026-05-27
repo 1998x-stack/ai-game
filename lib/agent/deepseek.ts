@@ -285,7 +285,7 @@ export class DeepSeekAgent implements AgentSession {
       return await this.client.chat.completions.create({
         model: this.config.model,
         messages,
-        tools: getOpenAITools(),
+        tools: getOpenAITools(this.config),
       });
     } catch (err) {
       const fallback = this.config.fallbackModel;
@@ -297,7 +297,7 @@ export class DeepSeekAgent implements AgentSession {
       return await this.client.chat.completions.create({
         model: fallback,
         messages,
-        tools: getOpenAITools(),
+        tools: getOpenAITools(this.config),
       });
     }
   }

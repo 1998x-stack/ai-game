@@ -1,16 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Maximize2, Minimize2, RefreshCw, Gamepad2, Loader2 } from 'lucide-react';
+import { Maximize2, Minimize2, RefreshCw, Gamepad2, Loader2, Globe, Upload, Key } from 'lucide-react';
 import type { GameError } from '@/components/ErrorConsole';
 
 interface Props {
   gameUrl: string | null;
   onError: (err: GameError) => void;
   isBuilding: boolean;
+  githubRepoUrl?: string | null;
+  onPushToGitHub?: () => void;
+  isPushing?: boolean;
+  hasGithubToken: boolean;
+  onOpenSettings?: () => void;
 }
 
-export default function GamePreview({ gameUrl, onError, isBuilding }: Props) {
+export default function GamePreview({ gameUrl, onError, isBuilding, githubRepoUrl, onPushToGitHub, isPushing, hasGithubToken, onOpenSettings }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -77,6 +82,43 @@ export default function GamePreview({ gameUrl, onError, isBuilding }: Props) {
           <span className="text-xs text-panel-muted font-medium">Game Preview</span>
         </div>
         <div className="flex items-center gap-1">
+          {githubRepoUrl ? (
+            <a
+              href={githubRepoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2 py-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
+              title="Open GitHub Pages"
+            >
+              <Globe className="w-3 h-3" />
+              <span>Live</span>
+            </a>
+          ) : hasGithubToken ? (
+            <button
+              onClick={onPushToGitHub}
+              disabled={!gameUrl || isBuilding || isPushing}
+              className="flex items-center gap-1 px-2 py-1.5 text-xs text-panel-muted hover:text-panel-text bg-panel-surface border border-panel-border rounded hover:bg-panel-surface/80 disabled:opacity-30 transition-colors"
+              title="Push to GitHub Pages"
+              aria-label="Push to GitHub"
+            >
+              {isPushing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Upload className="w-3 h-3" />
+              )}
+              <span>{isPushing ? 'Pushing...' : 'Publish'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenSettings}
+              className="flex items-center gap-1 px-2 py-1.5 text-xs text-amber-400/70 bg-amber-500/5 border border-amber-500/15 rounded hover:bg-amber-500/10 hover:text-amber-400 transition-colors"
+              title="Configure a GitHub token in Settings to publish"
+              aria-label="GitHub token required"
+            >
+              <Key className="w-3 h-3" />
+              <span>Setup Token</span>
+            </button>
+          )}
           <button
             onClick={handleRefresh}
             disabled={!gameUrl}

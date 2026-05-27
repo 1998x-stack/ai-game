@@ -1,6 +1,8 @@
 import { mkdir, cp, rm } from 'fs/promises';
 import * as path from 'path';
+import { access } from 'fs/promises';
 import { CONFIG } from '@/lib/config';
+import { initGitRepo } from '@/lib/git';
 
 const BASE_WORKSPACE_PATH = path.join(process.cwd(), 'user_space');
 const SCAFFOLD_PATH = path.join(process.cwd(), 'workspace');
@@ -13,6 +15,13 @@ export interface WorkspaceSession {
 }
 
 const sessions = new Map<string, WorkspaceSession>();
+
+function registerSession(sessionId: string, workspacePath: string): WorkspaceSession {
+  const now = new Date();
+  const session: WorkspaceSession = { sessionId, workspacePath, createdAt: now, lastActiveAt: now };
+  sessions.set(sessionId, session);
+  return session;
+}
 
 export async function createWorkspace(sessionId: string): Promise<WorkspaceSession> {
   if (sessions.size >= CONFIG.workspace.maxActiveSessions) {
@@ -31,17 +40,54 @@ export async function createWorkspace(sessionId: string): Promise<WorkspaceSessi
   await mkdir(path.join(workspacePath, 'output'), { recursive: true });
 
   await copyScaffoldToWorkspace(workspacePath);
+  initGitRepo(workspacePath);
 
-  const now = new Date();
-  const session: WorkspaceSession = {
-    sessionId,
-    workspacePath,
-    createdAt: now,
-    lastActiveAt: now,
-  };
+  return registerSession(sessionId, workspacePath);
+}
 
-  sessions.set(sessionId, session);
-  return session;
+export async function restoreWorkspace(sessionId: string): Promise<WorkspaceSession> {
+  if (sessions.size >= CONFIG.workspace.maxActiveSessions) {
+    const oldest = [...sessions.entries()].sort(
+      (a, b) => a[1].lastActiveAt.getTime() - b[1].lastActiveAt.getTime(),
+    )[0];
+    if (oldest) {
+      await deleteWorkspace(oldest[0]).catch(() => {});
+    }
+  }
+
+  const workspacePath = path.join(BASE_WORKSPACE_PATH, sessionId);
+
+  const gameJsExists = await access(path.join(workspacePath, 'scripts', 'game.js'))
+    .then(() => true)
+    .catch(() => false);
+
+  if (!gameJsExists) {
+    return createWorkspace(sessionId);
+  }
+
+  // Workspace already exists — ensure dirs + register, skip scaffold copy
+  await mkdir(path.join(workspacePath, 'scripts'), { recursive: true });
+  await mkdir(path.join(workspacePath, 'assets'), { recursive: true });
+  await mkdir(path.join(workspacePath, 'output'), { recursive: true });
+
+  // Do NOT copy scaffold — preserves agent additions to utils.js, gotchas.md, etc.
+
+  const gitExists = await access(path.join(workspacePath, '.git'))
+    .then(() => true)
+    .catch(() => false);
+
+  if (!gitExists) {
+    initGitRepo(workspacePath);
+  }
+
+  return registerSession(sessionId, workspacePath);
+}
+
+export async function workspaceExistsOnDisk(sessionId: string): Promise<boolean> {
+  const workspacePath = path.join(BASE_WORKSPACE_PATH, sessionId);
+  return access(path.join(workspacePath, 'scripts', 'game.js'))
+    .then(() => true)
+    .catch(() => false);
 }
 
 export function getWorkspace(sessionId: string): WorkspaceSession | null {

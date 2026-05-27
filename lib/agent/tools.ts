@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import OpenAI from 'openai';
-import { chromium } from 'playwright';
 import { AgentConfig, ToolDefinition, ToolHandler } from './types';
 import { buildGame } from '@/lib/build/packager';
 import { CONFIG } from '@/lib/config';
@@ -873,11 +872,9 @@ async function gameRuntimeHandler(
   const stateHistory: Record<string, unknown>[] = [];
   const startTime = Date.now();
 
-  let browser;
   let poolId: string | undefined;
   try {
     const pooled = await getBrowserPool().acquire();
-    browser = pooled.browser;
     const page = pooled.page;
     poolId = pooled.id;
     await page.setContent(html);

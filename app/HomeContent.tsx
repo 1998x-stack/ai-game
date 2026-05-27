@@ -15,7 +15,22 @@ const defaultSettings: AppSettings = {
   apiKey: '',
   model: CONFIG.providers.deepseek.defaultModel,
   baseUrl: CONFIG.providers.deepseek.defaultBaseUrl,
+  githubToken: '',
 };
+
+function parseTodoForRestore(content: string): Array<{ task: string; status: 'pending' | 'done'; verify?: string }> {
+  const tasks: Array<{ task: string; status: 'pending' | 'done'; verify?: string }> = [];
+  for (const line of content.split('\n')) {
+    const pendingMatch = line.match(/^[-*]\s*\[ \]\s*(.+)/);
+    const doneMatch = line.match(/^[-*]\s*\[x\]\s*(.+)/i);
+    if (pendingMatch) {
+      tasks.push({ task: pendingMatch[1].trim(), status: 'pending' });
+    } else if (doneMatch) {
+      tasks.push({ task: doneMatch[1].trim(), status: 'done' });
+    }
+  }
+  return tasks;
+}
 
 export default function HomeContent() {
   const [sessionId, setSessionId] = useState<string>('');
@@ -30,6 +45,8 @@ export default function HomeContent() {
   const [restoringSession, setRestoringSession] = useState(false);
   const [confirmNewGame, setConfirmNewGame] = useState(false);
   const [todoUpdate, setTodoUpdate] = useState<TodoUpdate | null>(null);
+  const [githubRepoUrl, setGithubRepoUrl] = useState<string | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
 
   const isDragging = useRef(false);
 
@@ -48,7 +65,9 @@ export default function HomeContent() {
   useEffect(() => {
     if (!sessionId) return;
     const params = new URLSearchParams(window.location.search);
-    if (!params.get('session')) return;
+    const urlSessionId = params.get('session');
+    // Only restore if URL param matches current sessionId (prevents New Game from triggering restore)
+    if (!urlSessionId || urlSessionId !== sessionId) return;
 
     setRestoringSession(true);
     fetch(`/api/session/${sessionId}`)
@@ -67,11 +86,15 @@ export default function HomeContent() {
           if (msg.role === 'user') {
             loaded.push({ role: 'user', content: msg.content });
           } else if (msg.role === 'assistant') {
+            const hasToolCalls = msg.tool_calls && (msg.tool_calls as unknown[]).length > 0;
+            const hasBuildGame = hasToolCalls && (msg.tool_calls as Array<{name: string}>).some(tc => tc.name === 'build_game');
             loaded.push({
               role: 'agent',
-              content: msg.content || '',
+              content: msg.content || (hasToolCalls ? 'Done.' : ''),
               reasoningContent: msg.reasoning_content || undefined,
               toolCalls: msg.tool_calls || undefined,
+              // Reconstruct buildResult: set on the LAST message with a successful build_game call
+              buildResult: hasBuildGame && data.hasBuild ? true : undefined,
             });
           }
         }
@@ -80,6 +103,20 @@ export default function HomeContent() {
         }
         if (data.gameUrl) {
           setGameUrl(data.gameUrl);
+        }
+        if (data.gitPagesUrl) {
+          setGithubRepoUrl(data.gitPagesUrl);
+        }
+        if (data.todoContent) {
+          try {
+            const tasks = parseTodoForRestore(data.todoContent);
+            if (tasks.length > 0) {
+              const done = tasks.filter(t => t.status === 'done').length;
+              const pending = tasks.filter(t => t.status === 'pending').length;
+              const next = tasks.find(t => t.status === 'pending');
+              setTodoUpdate({ tasks, done, pending, next: next?.task });
+            }
+          } catch { /* invalid todo format */ }
         }
       })
       .catch(() => {
@@ -188,6 +225,15 @@ export default function HomeContent() {
                     arguments: event.arguments,
                   });
                   break;
+                case 'github_push_result':
+                  setIsPushing(false);
+                  if (event.success) {
+                    setGithubRepoUrl(event.pagesUrl || event.repoUrl || null);
+                  }
+                  // fall through to update agent message
+                  agentMsg.githubPushResult = event.success;
+                  if (event.pagesUrl) agentMsg.githubPagesUrl = event.pagesUrl;
+                  break;
                 case 'build_result':
                   if (event.success && event.previewUrl) {
                     setGameUrl(event.previewUrl);
@@ -256,6 +302,7 @@ export default function HomeContent() {
     setGameUrl(null);
     setErrors([]);
     setTodoUpdate(null);
+    setGithubRepoUrl(null);
     setConfirmNewGame(false);
   }, []);
 
@@ -270,6 +317,14 @@ export default function HomeContent() {
   const handleClearErrors = useCallback(() => {
     setErrors([]);
   }, []);
+
+  const handlePushToGitHub = useCallback(() => {
+    if (!settings.githubToken || !gameUrl) return;
+    setIsPushing(true);
+    handleSendMessage(
+      'Please push the current game to GitHub using the github_push tool. Make it a public repository.'
+    );
+  }, [settings.githubToken, gameUrl, handleSendMessage]);
 
   // Resizable divider logic
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -394,6 +449,11 @@ export default function HomeContent() {
             gameUrl={gameUrl}
             onError={handleGameError}
             isBuilding={isGenerating}
+            githubRepoUrl={githubRepoUrl}
+            onPushToGitHub={handlePushToGitHub}
+            isPushing={isPushing}
+            hasGithubToken={!!settings.githubToken}
+            onOpenSettings={() => setShowSettings(true)}
           />
         </div>
 

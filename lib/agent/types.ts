@@ -7,6 +7,7 @@ export interface AgentConfig {
   toolTimeout?: number;
   fallbackModel?: string;
   signal?: AbortSignal;
+  githubToken?: string;
 }
 
 export interface ToolDefinition {
@@ -60,6 +61,7 @@ export type StreamEvent =
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown> }
   | { type: 'tool_result'; name: string; result: string; error?: string }
   | { type: 'build_result'; previewUrl: string; success: boolean }
+  | { type: 'github_push_result'; repoUrl?: string; pagesUrl?: string; success: boolean; error?: string }
   | { type: 'error'; message: string }
   | { type: 'done' }
   | {
