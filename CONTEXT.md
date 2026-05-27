@@ -3,7 +3,7 @@
 ## Core Concepts
 
 ### Agent
-An LLM-powered assistant with tool access (10 tools). The agent receives a system prompt built from workspace scaffold docs, then iterates in a function-calling loop to generate or modify game code. Currently only DeepSeek provider is supported via OpenAI-compatible SDK. Maximum 10 iterations per request.
+An LLM-powered assistant with tool access (15 tools). The agent receives a system prompt built from workspace scaffold docs, then iterates in a function-calling loop to generate or modify game code. Currently only DeepSeek provider is supported via OpenAI-compatible SDK. Maximum 10 iterations per request.
 
 ### Workspace (Workspace)
 A per-session isolated directory at `user_space/{sessionId}/` containing:
@@ -17,7 +17,7 @@ A per-session isolated directory at `user_space/{sessionId}/` containing:
 ### Scaffold (Scaffold)
 The authoritative knowledge base at `workspace/` that agents reference:
 - **Docs**: `game-dev-guide.md`, `game-patterns.md`, `gotchas.md` — authoritative game development patterns and anti-patterns
-- **Templates**: `snake/`, `breakout/`, `tetris/`, `2048/` — complete game implementations as reference
+- **Templates**: `snake/`, `breakout/`, `tetris/`, `2048/` — complete game implementations as reference. These four "template types" have full test scenarios in game_runtime. Additional "detection types" (platformer, shooter, puzzle-matching) are inferred via keyword heuristics but lack scaffold reference implementations — they use heuristic rules + AI fallback for testing.
 - **Library**: `lib/utils.js` — reusable game engine (GameLoop, CollisionDetector, InputManager, etc.)
 
 Agents MUST read scaffold docs before generating code. Scaffold is git-tracked and extensible — new templates and gotchas take effect immediately.
@@ -35,7 +35,7 @@ Takes `scripts/*.js` + `assets/*` → produces a single self-contained HTML file
 An ephemeral chat session identified by a UUID. Each session has its own workspace. Sessions persist via JSONL files on disk (survive server restart) and an in-memory Map for active agents. Session agents maintain message history for conversation continuity.
 
 ### Tool Call (Tool Call)
-The agent's mechanism for interacting with the workspace. Ten tools available:
+The agent's mechanism for interacting with the workspace. Fifteen tools available:
 
 **File operations**: `read_file` (default 2000-line limit), `write_file` (overwrite-protected), `edit_file` (unique-match enforcement), `list_directory` (deterministic format), `grep_file` (ripgrep with JS fallback)
 **Build**: `build_game` — triggers the build pipeline
@@ -43,6 +43,12 @@ The agent's mechanism for interacting with the workspace. Ten tools available:
 **Planning**: `write_todo` — writes task list as markdown checklist from JSON array
 **Error**: `set_error` — reports unrecoverable errors
 **Delegation**: `delegate_subagent` — offloads low-signal-to-noise research tasks to subagents (max 3 concurrent)
+**Git**: `git_log`, `git_diff`, `git_status` — inspect development history (auto-committed on every successful build)
+**GitHub**: `github_push` — create repo, push game, enable GitHub Pages, return live URL (requires GitHub PAT in Settings)
+### Game Runtime Test (Game Runtime)
+Headless browser automated testing via Playwright (`lib/runtime/`). Loads the built game, extracts runtime state, and runs game-type-aware test scenarios. Uses a three-tier degradation strategy to control API costs: (1) preset scenarios for known game types (zero API calls), (2) heuristic rules for unknown types (auto-detect input methods + state variables), (3) AI decision as last resort (with call limits). Enabled by default with built-in cost controls: max API calls per test, total timeout, and browser connection pooling.
+
+Screenshots are disabled by default. When enabled, they are stored to disk (`output/screenshots/`) and delivered via SSE to the frontend — never embedded in agent tool results — to avoid context window pollution.
 
 ### Subagent (Subagent)
 A lightweight research agent spawned by `delegate_subagent` for low signal-to-noise-ratio tasks (reading documentation, searching code patterns, gathering context). Subagents have restricted tools (read_file, write_file, grep_file, list_directory only), run for max 5 iterations, and are limited to 3 concurrent instances per session. They cannot build games, write todos, or delegate further.
@@ -50,9 +56,28 @@ A lightweight research agent spawned by `delegate_subagent` for low signal-to-no
 ### Game Preview (Game Preview)
 The right panel iframe that displays the built game. Sandboxed with `allow-scripts` (no `allow-same-origin` — `postMessage` works cross-origin and `allow-same-origin` would leak access to parent DOM). Game errors are communicated back to the parent page via `postMessage` with `{ type: 'game-error', message, source, lineno, colno }`.
 
+### Git History (Git History)
+Each session workspace is initialized as a git repository at creation time. Every successful `build_game` call triggers an automatic commit (`git add -A && git commit`), creating a linear development history. The agent can inspect this history via `git_log`, `git_diff`, and `git_status` tools — enabling it to understand what changed between iterations without relying solely on chat context. The `.git` directory lives at `user_space/{sessionId}/.git/` alongside `scripts/` and `output/`.
+
+**Restoration safety**: `restoreWorkspace()` in `lib/workspace/manager.ts` detects existing workspaces on disk and skips scaffold recopy, preserving agent additions to `utils.js`, `gotchas.md`, and the git history across HMR cycles and server restarts.
+
+### GitHub Integration (GitHub Integration)
+Users can publish built games to GitHub Pages via a personal access token (PAT) configured in Settings. The `github_push` tool (available only when a token is present) creates a public repository, pushes the game, enables GitHub Pages, and returns a live URL. The GamePreview toolbar shows a "Publish" button (when token is configured) or a "Setup Token" hint (when not), and a "Live" link when published. Token gating ensures the agent never sees `github_push` without a configured token — no wasted iterations.
+
+### Session Recovery (Session Recovery)
+Sessions persist across server restarts via JSONL files on disk (`user_space/{sessionId}/session.jsonl`). When a user returns via `?session={id}` URL parameter, the system:
+
+1. Restores chat messages and game URL via the session API
+2. Creates a new agent (in-memory agents are ephemeral) but loads full conversation history from JSONL
+3. Injects a workspace state summary into the system prompt — telling the agent about existing `game.js`, build status, `todo.md`, and recent git history
+4. Reconstructs UI state: build result badges, GitHub publish links, todo progress cards
+
+**Critical**: Use `restoreWorkspace()` (not `createWorkspace()`) when JSONL exists — this skips scaffold recopy and preserves agent-added utilities, gotchas, and skills.
+
 ## Known Gaps (v2)
 
 - **OS-level isolation**: Current path validation is string-based, not kernel-level. Containerization needed for production multi-tenancy.
-- **GitHub OAuth**: Sharing/deploy feature deferred.
+- **Full GitHub OAuth**: Sharing uses PAT-based auth (BYO-token pattern). Full OAuth with "Login with GitHub" deferred.
 - **MCP integration**: Image/music generation via MCP tools deferred.
 - **Provider expansion**: Only DeepSeek implemented. Claude/OpenAI factory branches are stubs.
+- **History compaction**: Full conversation history is loaded on session restore with no truncation. Long sessions may exceed model context windows.
