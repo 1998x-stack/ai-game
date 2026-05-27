@@ -1664,11 +1664,10 @@ describe('game_runtime handler', () => {
   it('runs game test loop and returns report', async () => {
     // Mock state extraction: game running, then game over
     mockPage.evaluate
-      .mockResolvedValueOnce(undefined) // inject script
-      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '0' }) // step 1
-      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '10' }) // step 2
-      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '10', gameOver: 'true' }) // step 3
-      .mockResolvedValueOnce({ canvasWidth: 800, canvasHeight: 600, score: '10', gameOver: 'true' }); // final
+      .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '0' }) // step 1
+      .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '10' }) // step 2
+      .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '10', gameOver: 'true' }) // step 3
+      .mockResolvedValueOnce({ _canvas: { width: 800, height: 600 }, score: '10', gameOver: 'true' }); // final
 
     // Mock OpenAI calls for actions
     const mockCreate = vi
@@ -1706,9 +1705,8 @@ describe('game_runtime handler', () => {
 
   it('detects zero canvas dimensions', async () => {
     mockPage.evaluate
-      .mockResolvedValueOnce(undefined) // inject
-      .mockResolvedValueOnce({ canvasWidth: 0, canvasHeight: 0, score: '0' }) // step 1
-      .mockResolvedValueOnce({ canvasWidth: 0, canvasHeight: 0, score: '0' }); // final
+      .mockResolvedValueOnce({ _canvas: { width: 0, height: 0 }, score: '0' }) // step 1
+      .mockResolvedValueOnce({ _canvas: { width: 0, height: 0 }, score: '0' }); // final
 
     const result = await handler(
       { maxSteps: 1, fps: 5 },

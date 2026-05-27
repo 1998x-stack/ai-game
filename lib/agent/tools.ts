@@ -6,6 +6,8 @@ import { chromium } from 'playwright';
 import { AgentConfig, ToolDefinition, ToolHandler } from './types';
 import { buildGame } from '@/lib/build/packager';
 import { CONFIG } from '@/lib/config';
+import { gitLog, gitDiff, gitDiffStaged, gitStatus } from '@/lib/git';
+import { githubPush } from '@/lib/github';
 
 function validatePath(userPath: string, workspaceRoot: string): string {
   if (userPath.includes('..')) {
@@ -174,6 +176,52 @@ const gameRuntimeDef: ToolDefinition = {
     properties: {
       maxSteps: { type: 'number', description: 'Maximum interaction steps (default: 15)' },
       fps: { type: 'number', description: 'Game speed in FPS. Lower = more time for model to decide each action (default: 5)' },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+};
+
+const gitLogDef: ToolDefinition = {
+  name: 'git_log',
+  description: 'Show recent git commit history in this session workspace. Use to understand what changes were made in previous iterations. Returns one-line summaries of the last N commits (default 10). The workspace is automatically versioned on each successful build — you never need to commit manually.',
+  parameters: {
+    type: 'object',
+    properties: {
+      count: { type: 'number', description: 'Number of commits to show (default: 10, max: 50)' },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+};
+
+const gitDiffDef: ToolDefinition = {
+  name: 'git_diff',
+  description: 'Show unstaged or staged file changes in the workspace. Use to see what the user or previous iterations modified. Pass staged=true to see staged changes, or omit to see unstaged diffs. This helps you understand what changed before you make further edits.',
+  parameters: {
+    type: 'object',
+    properties: {
+      staged: { type: 'boolean', description: 'Show staged changes instead of unstaged (default: false)' },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+};
+
+const gitStatusDef: ToolDefinition = {
+  name: 'git_status',
+  description: 'Show the current working tree status — which files are modified, added, or deleted. Use before making changes to understand workspace state, or after user feedback to see what might need updating.',
+  parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+};
+
+const githubPushDef: ToolDefinition = {
+  name: 'github_push',
+  description: 'Push the built game to a new GitHub repository and enable GitHub Pages for instant sharing. Requires the user to have configured a GitHub token in Settings. Creates a public repo with the built output/index.html, enables Pages, and returns the live URL. Call AFTER a successful build_game. The repo is named automatically (ai-game-{timestamp}) unless you specify a name. IMPORTANT: Only call this when the user asks you to share or publish their game.',
+  parameters: {
+    type: 'object',
+    properties: {
+      repoName: { type: 'string', description: 'Custom repository name (optional). Default: ai-game-{timestamp}. Use lowercase, hyphens, no spaces.' },
+      private: { type: 'boolean', description: 'Make the repository private (default: false)' },
     },
     required: [],
     additionalProperties: false,
@@ -627,6 +675,77 @@ async function delegateSubagentHandler(
   }
 }
 
+async function gitLogHandler(args: Record<string, unknown>, root: string) {
+  const count = Math.min(Math.max(1, Number(args.count) || 10), 50);
+  return `Git history (last ${count} commits):\n${gitLog(root, count)}`;
+}
+
+async function gitDiffHandler(args: Record<string, unknown>, root: string) {
+  const staged = args.staged === true;
+  const output = staged ? gitDiffStaged(root) : gitDiff(root);
+  return output || '(no changes)';
+}
+
+async function gitStatusHandler(_args: Record<string, unknown>, root: string) {
+  return `Workspace git status:\n${gitStatus(root)}`;
+}
+
+async function githubPushHandler(args: Record<string, unknown>, root: string, config?: AgentConfig) {
+  const token = config?.githubToken;
+  if (!token) {
+    return 'GitHub token not configured. The user must add a GitHub personal access token in Settings (gear icon) with "repo" and "admin:repo_hook" scopes.';
+  }
+  const repoName = typeof args.repoName === 'string' && args.repoName ? args.repoName : undefined;
+  const isPrivate = args.private === true;
+
+  const result = await githubPush(root, token, repoName, isPrivate);
+
+  if (result.success) {
+    return `GITHUB PUSH SUCCESS.\nRepository: ${result.repoUrl}\nGitHub Pages: ${result.pagesUrl}\n\nThe game is now live and shareable!`;
+  }
+  return `GITHUB PUSH FAILED: ${result.error}\n\nCheck that:\n1. The GitHub token has "repo" scope enabled\n2. A game has been built (run build_game first)\n3. The repository name is available`;
+}
+
+async function extractGameState(page: any): Promise<Record<string, unknown>> {
+  return page.evaluate(() => {
+    const state: Record<string, unknown> = {};
+    const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
+    if (canvas) state._canvas = { width: canvas.width, height: canvas.height };
+
+    // Dynamic window-global sweep (catches non-module scripts)
+    const skipRE = /^(on|webkit|moz|ms|constructor|__|\$|postMessage|fetch|console|document|window|navigator|location|localStorage|sessionStorage|crypto|performance|Math|JSON|Promise|Symbol|Array|Object|String|Number|Boolean|Date|RegExp|Error|Map|Set|WeakMap|WeakSet|Intl|Reflect|Proxy|Atomics|SharedArrayBuffer|DataView)/;
+    const w = window as any;
+    const keys = Object.getOwnPropertyNames(w).filter(k => !skipRE.test(k));
+    for (const key of keys.slice(0, 50)) {
+      try {
+        const val = w[key];
+        if (val === undefined || val === null) continue;
+        if (typeof val === 'function') continue;
+        if (val instanceof HTMLElement) continue;
+        if (typeof val === 'object') {
+          const str = JSON.stringify(val);
+          state[key] = str.length > 500 ? `[object: ${Object.keys(val).slice(0, 5).join(',')}...]` : val;
+        } else {
+          state[key] = String(val).slice(0, 200);
+        }
+      } catch { /* skip inaccessible */ }
+    }
+
+    // Fallback: explicitly check likely window-assigned vars (module scripts)
+    const likelyKeys = ['score', 'gameOver', 'gameover', 'isGameOver', 'snake', 'food', 'direction', 'ball', 'paddle', 'bricks', 'level', 'lives', 'player', 'enemies', 'state'];
+    for (const key of likelyKeys) {
+      if (key in state) continue; // already captured by dynamic sweep
+      try {
+        const val = (window as any)[key];
+        if (val !== undefined && val !== null) {
+          state[key] = typeof val === 'object' ? JSON.stringify(val).slice(0, 200) : String(val).slice(0, 200);
+        }
+      } catch { /* skip */ }
+    }
+    return state;
+  });
+}
+
 async function gameRuntimeHandler(
   args: Record<string, unknown>,
   root: string,
@@ -663,51 +782,6 @@ async function gameRuntimeHandler(
     const page = await browser.newPage();
     await page.setContent(html);
 
-    // Inject state extraction helper
-    await page.evaluate(() => {
-      (window as any).__extractGameState = () => {
-        const canvas = document.getElementById(
-          'gameCanvas',
-        ) as HTMLCanvasElement | null;
-        const state: Record<string, unknown> = {
-          canvasWidth: canvas?.width || 0,
-          canvasHeight: canvas?.height || 0,
-        };
-        // Try to extract common game state variables
-        const w = window as any;
-        for (const key of [
-          'score',
-          'gameOver',
-          'gameover',
-          'isGameOver',
-          'snake',
-          'food',
-          'direction',
-          'ball',
-          'paddle',
-          'bricks',
-          'level',
-          'lives',
-          'player',
-          'enemies',
-          'state',
-        ]) {
-          try {
-            const val = w[key];
-            if (val !== undefined && val !== null) {
-              if (typeof val === 'object') {
-                state[key] = JSON.stringify(val).slice(0, 200);
-              } else {
-                state[key] = String(val).slice(0, 200);
-              }
-            }
-          } catch {
-            /* skip inaccessible */
-          }
-        }
-        return state;
-      };
-    });
 
     // Wait for game to initialize
     await page.waitForTimeout(1000);
@@ -718,9 +792,7 @@ async function gameRuntimeHandler(
     });
 
     for (let step = 0; step < maxSteps; step++) {
-      const state = await page.evaluate(() =>
-        (window as any).__extractGameState(),
-      );
+      const state = await extractGameState(page);
 
       const stateText = Object.entries(state)
         .map(([k, v]) => `${k}: ${v}`)
@@ -785,9 +857,7 @@ async function gameRuntimeHandler(
     }
 
     // Final analysis
-    const finalState = await page.evaluate(() =>
-      (window as any).__extractGameState(),
-    );
+    const finalState = await extractGameState(page);
 
     if (
       finalState.gameOver !== 'true' &&
@@ -800,12 +870,8 @@ async function gameRuntimeHandler(
     }
 
     // Check for edge-case issues
-    if (
-      finalState.canvasHeight === '0' ||
-      finalState.canvasHeight === 0 ||
-      finalState.canvasWidth === '0' ||
-      finalState.canvasWidth === 0
-    ) {
+    const canvasInfo = finalState._canvas as { width: number; height: number } | undefined;
+    if (canvasInfo && (canvasInfo.width === 0 || canvasInfo.height === 0)) {
       issues.push('Canvas has zero dimensions — check canvas.width/height setup.');
     }
 
@@ -849,19 +915,28 @@ export const toolRegistry: ToolHandler[] = [
   { definition: setErrorDef, handler: setErrorHandler },
   { definition: delegateSubagentDef, handler: delegateSubagentHandler },
   { definition: gameRuntimeDef, handler: gameRuntimeHandler },
+  { definition: gitLogDef, handler: gitLogHandler },
+  { definition: gitDiffDef, handler: gitDiffHandler },
+  { definition: gitStatusDef, handler: gitStatusHandler },
+  { definition: githubPushDef, handler: githubPushHandler },
 ];
 
 export const tools: ToolDefinition[] = toolRegistry.map(t => t.definition);
 
-export function getOpenAITools(): { type: 'function'; function: ToolDefinition }[] {
-  return getOpenAIToolsFiltered('master');
+export function getOpenAITools(config?: AgentConfig): { type: 'function'; function: ToolDefinition }[] {
+  return getOpenAIToolsFiltered('master', config);
 }
 
 export function getOpenAIToolsFiltered(
   role: 'master' | 'subagent',
+  config?: AgentConfig,
 ): { type: 'function'; function: ToolDefinition }[] {
   const allowed = CONFIG.tools.allowed[role];
   return toolRegistry
     .filter((t) => allowed.includes(t.definition.name))
+    .filter((t) => {
+      if (t.definition.name === 'github_push' && !config?.githubToken) return false;
+      return true;
+    })
     .map((t) => ({ type: 'function' as const, function: t.definition }));
 }
