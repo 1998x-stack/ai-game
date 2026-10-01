@@ -16,6 +16,12 @@ export interface WorkspaceSession {
 
 const sessions = new Map<string, WorkspaceSession>();
 
+function assertSessionId(sessionId: string): void {
+  if (!CONFIG.validation.uuidPattern.test(sessionId)) {
+    throw new Error('Invalid session ID format');
+  }
+}
+
 function registerSession(sessionId: string, workspacePath: string): WorkspaceSession {
   const now = new Date();
   const session: WorkspaceSession = { sessionId, workspacePath, createdAt: now, lastActiveAt: now };
@@ -24,6 +30,7 @@ function registerSession(sessionId: string, workspacePath: string): WorkspaceSes
 }
 
 export async function createWorkspace(sessionId: string): Promise<WorkspaceSession> {
+  assertSessionId(sessionId);
   if (sessions.size >= CONFIG.workspace.maxActiveSessions) {
     const oldest = [...sessions.entries()].sort(
       (a, b) => a[1].lastActiveAt.getTime() - b[1].lastActiveAt.getTime(),
@@ -46,6 +53,7 @@ export async function createWorkspace(sessionId: string): Promise<WorkspaceSessi
 }
 
 export async function restoreWorkspace(sessionId: string): Promise<WorkspaceSession> {
+  assertSessionId(sessionId);
   if (sessions.size >= CONFIG.workspace.maxActiveSessions) {
     const oldest = [...sessions.entries()].sort(
       (a, b) => a[1].lastActiveAt.getTime() - b[1].lastActiveAt.getTime(),
@@ -84,6 +92,7 @@ export async function restoreWorkspace(sessionId: string): Promise<WorkspaceSess
 }
 
 export async function workspaceExistsOnDisk(sessionId: string): Promise<boolean> {
+  assertSessionId(sessionId);
   const workspacePath = path.join(BASE_WORKSPACE_PATH, sessionId);
   return access(path.join(workspacePath, 'scripts', 'game.js'))
     .then(() => true)
@@ -99,6 +108,7 @@ export function getWorkspace(sessionId: string): WorkspaceSession | null {
 }
 
 export async function deleteWorkspace(sessionId: string): Promise<boolean> {
+  assertSessionId(sessionId);
   const session = sessions.get(sessionId);
   if (!session) return false;
 

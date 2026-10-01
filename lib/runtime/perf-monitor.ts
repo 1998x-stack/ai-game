@@ -46,6 +46,7 @@ export async function extractPerfMetrics(page: any): Promise<PerfMetrics> {
 
   const fpsValues = dts.map((dt: number) => 1000 / dt);
   const sorted = [...fpsValues].sort((a, b) => a - b);
+  const sortedFrameTimes = [...dts].sort((a, b) => a - b);
   const avg = fpsValues.reduce((a: number, b: number) => a + b, 0) / fpsValues.length;
 
   return {
@@ -60,7 +61,7 @@ export async function extractPerfMetrics(page: any): Promise<PerfMetrics> {
       min: Math.round(Math.min(...dts)),
       max: Math.round(Math.max(...dts)),
       avg: Math.round(dts.reduce((a: number, b: number) => a + b, 0) / dts.length),
-      p99: Math.round(sorted[Math.floor(sorted.length * 0.99)] || 0),
+      p99: Math.round(sortedFrameTimes[Math.floor(sortedFrameTimes.length * 0.99)] || 0),
     },
   };
 }

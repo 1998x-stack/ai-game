@@ -4,7 +4,7 @@
 
 AI Game Studio 的工具系统是 Agent 与工作区交互的唯一通道。Agent 通过函数调用 (function calling) 机制使用工具来读取文档、编写代码、搜索文件、构建游戏以及委托子任务。所有工具定义在 `lib/agent/tools.ts` 中，通过 `toolRegistry` 统一注册。
 
-**当前工具数量**: 11 个（10 个主工具 + 1 个子代理工具）
+**当前工具数量**: 15 个（含 Git、Runtime、GitHub 和 Subagent 工具）
 
 ## 架构
 
@@ -306,7 +306,7 @@ type ToolHandlerFn = (
 
 ## 测试覆盖
 
-工具系统测试位于 `__tests__/api.test.ts`（84 个测试用例），覆盖四个维度：
+工具系统测试位于 `__tests__/api.test.ts` 及安全/构建测试，当前共 105 个测试用例：
 
 ### toolRegistry 测试 (4 个用例)
 - 工具注册完整性（所有工具都在注册表中）

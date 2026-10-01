@@ -1,5 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import { parse } from 'acorn';
+import { CONFIG } from '@/lib/config';
+
+export interface BuildResult {
+  html: string;
+  outputPath: string;
+  errors: string[];
+  success?: boolean;
+  buildId?: string;
+}
 
 const MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -56,14 +67,13 @@ function buildMinimalHtml(): string {
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AI Game</title><style>body{margin:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body><canvas id="gameCanvas"></canvas><script type="module">window.parent.postMessage({type:\'game-ready\'},\'*\');</script></body></html>';
 }
 
-function writeFallbackOutput(outputDir: string, error: string): { html: string; outputPath: string; errors: string[] } {
+function writeFallbackOutput(outputDir: string, error: string): BuildResult {
   const html = buildMinimalHtml();
   const outputPath = path.join(outputDir, 'index.html');
-  try { fs.mkdirSync(outputDir, { recursive: true }); fs.writeFileSync(outputPath, html, 'utf-8'); } catch { /* empty */ }
-  return { html, outputPath, errors: [error] };
+  return { html, outputPath, errors: [error], success: false, buildId: crypto.randomUUID() };
 }
 
-export function buildGame(workspacePath: string): { html: string; outputPath: string; errors: string[] } {
+export function buildGame(workspacePath: string): BuildResult {
   const errors: string[] = [];
   const scriptsDir = path.join(workspacePath, 'scripts');
   const assetsDir = path.join(workspacePath, 'assets');
@@ -85,6 +95,16 @@ export function buildGame(workspacePath: string): { html: string; outputPath: st
   for (const file of scriptFiles) {
     try {
       const content = fs.readFileSync(path.join(scriptsDir, file), 'utf-8');
+      if (Buffer.byteLength(content, 'utf8') > CONFIG.build.maxScriptBytes) {
+        errors.push(`Script "${file}" exceeds the ${CONFIG.build.maxScriptBytes}-byte limit`);
+        continue;
+      }
+      try {
+        parse(content, { ecmaVersion: 'latest', sourceType: 'module' });
+      } catch (error) {
+        errors.push(`Syntax error in "${file}": ${(error as Error).message}`);
+        continue;
+      }
       scripts.push({ name: file, content });
     } catch (e) {
       errors.push(`Failed to read script "${file}": ${(e as Error).message}`);
@@ -96,6 +116,7 @@ export function buildGame(workspacePath: string): { html: string; outputPath: st
   }
 
   const assetMap: { key: string; dataUri: string }[] = [];
+  let totalAssetBytes = 0;
   try {
     const assetFiles = fs.readdirSync(assetsDir);
     for (const file of assetFiles) {
@@ -103,6 +124,15 @@ export function buildGame(workspacePath: string): { html: string; outputPath: st
       try {
         if (fs.statSync(fullPath).isFile()) {
           const buf = fs.readFileSync(fullPath);
+          if (buf.byteLength > CONFIG.build.maxAssetBytes) {
+            errors.push(`Asset "${file}" exceeds the ${CONFIG.build.maxAssetBytes}-byte limit`);
+            continue;
+          }
+          totalAssetBytes += buf.byteLength;
+          if (totalAssetBytes > CONFIG.build.maxTotalAssetBytes) {
+            errors.push(`Assets exceed the ${CONFIG.build.maxTotalAssetBytes}-byte total limit`);
+            continue;
+          }
           const mime = getMimeType(file);
           const dataUri = `data:${mime};base64,${buf.toString('base64')}`;
           assetMap.push({ key: escapeJsStr(file), dataUri: escapeJsStr(dataUri) });
@@ -113,7 +143,8 @@ export function buildGame(workspacePath: string): { html: string; outputPath: st
     }
   } catch { /* assets/ missing is fine */ }
 
-  const allCode = scripts.map(s => s.content).join('\n');
+  // Prevent an agent-provided string/comment containing </script> from ending the HTML script element.
+  const allCode = scripts.map(s => s.content).join('\n').replace(/<\/(script)/gi, '<\\/$1');
 
   const gameScriptBlock =
     allCode +
@@ -128,18 +159,26 @@ export function buildGame(workspacePath: string): { html: string; outputPath: st
   }
 
   const errorScript = '<script>window.addEventListener(\'error\',function(e){window.parent.postMessage({type:\'game-error\',message:e.message,source:e.filename,lineno:e.lineno,colno:e.colno},\'*\')});</script>';
-  const readyScript = '<script type="module">window.parent.postMessage({type:\'game-ready\'},\'*\');</script>';
-  const initScript = assetScriptBlock + '<script type="module">' + gameScriptBlock + '</script>';
+  const initScript = assetScriptBlock + '<script type="module">' + gameScriptBlock + '\nwindow.parent.postMessage({type:\'game-ready\'},\'*\');</script>';
 
-  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AI Game</title><style>body{margin:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body><canvas id="gameCanvas"></canvas>' + errorScript + initScript + readyScript + '</body></html>';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AI Game</title><style>body{margin:0;overflow:hidden;background:#000}canvas{display:block}</style></head><body><canvas id="gameCanvas"></canvas>' + errorScript + initScript + '</body></html>';
 
   const outputPath = path.join(outputDir, 'index.html');
+  if (Buffer.byteLength(html, 'utf8') > CONFIG.build.maxHtmlBytes) {
+    errors.push(`Generated HTML exceeds the ${CONFIG.build.maxHtmlBytes}-byte limit`);
+  }
+  const buildId = crypto.randomUUID();
   try {
-    fs.mkdirSync(outputDir, { recursive: true });
-    fs.writeFileSync(outputPath, html, 'utf-8');
+    if (errors.length > 0) return { html, outputPath, errors, success: false, buildId };
+    const stagingDir = path.join(outputDir, '.staging', buildId);
+    const stagingPath = path.join(stagingDir, 'index.html');
+    fs.mkdirSync(stagingDir, { recursive: true });
+    fs.writeFileSync(stagingPath, html, 'utf-8');
+    fs.renameSync(stagingPath, outputPath);
+    fs.writeFileSync(path.join(outputDir, 'build-manifest.json'), JSON.stringify({ buildId, createdAt: new Date().toISOString() }), 'utf-8');
   } catch (e) {
     errors.push(`Failed to write output file: ${(e as Error).message}`);
   }
 
-  return { html, outputPath, errors };
+  return { html, outputPath, errors, success: errors.length === 0, buildId };
 }

@@ -1,9 +1,11 @@
 // ═════════════════════════════════════════════════════════════
 // GitHub operations via gh CLI (primary) + REST API (fallback)
 // ═════════════════════════════════════════════════════════════
-import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { execFileSync, execSync } from 'child_process';
+import { existsSync, chmodSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import os from 'os';
 import * as path from 'path';
+import { validateRepoName } from '@/lib/security/validation';
 
 interface GitHubPushResult {
   success: boolean;
@@ -12,8 +14,8 @@ interface GitHubPushResult {
   error?: string;
 }
 
-function ghExec(cmd: string, token: string, cwd?: string): string {
-  return execSync(`gh ${cmd}`, {
+function ghExec(args: string[], token: string, cwd?: string): string {
+  return execFileSync('gh', args, {
     cwd: cwd ?? process.cwd(),
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -29,6 +31,36 @@ function hasGhCli(): boolean {
   } catch {
     return false;
   }
+}
+
+function withGitToken<T>(workspacePath: string, token: string, action: (env: NodeJS.ProcessEnv) => T): T {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'ai-game-askpass-'));
+  const askpass = path.join(dir, 'askpass.cjs');
+  writeFileSync(askpass, '#!/usr/bin/env node\nprocess.stdout.write(process.env.AI_GAME_GIT_TOKEN || "");\n', { mode: 0o700 });
+  chmodSync(askpass, 0o700);
+  try {
+    return action({
+      ...process.env,
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_ASKPASS: askpass,
+      AI_GAME_GIT_TOKEN: token,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_NOGLOBAL: '1',
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function gitExec(args: string[], cwd: string, token?: string): string {
+  const run = (env?: NodeJS.ProcessEnv) => execFileSync('git', args, {
+    cwd,
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 30_000,
+    env,
+  }).trim();
+  return token ? withGitToken(cwd, token, run) : run();
 }
 
 async function createRepoApi(
@@ -125,7 +157,7 @@ export async function githubPush(
     return { success: false, error: 'No built game found. Run build_game first.' };
   }
 
-  const name = repoName || `ai-game-${Date.now()}`;
+  const name = validateRepoName(repoName || `ai-game-${Date.now()}`);
 
   try {
     if (hasGhCli()) {
@@ -146,30 +178,16 @@ async function pushWithGhCli(
 ): Promise<GitHubPushResult> {
   const visibility = isPrivate ? '--private' : '--public';
 
-  ghExec(
-    `repo create ${repoName} ${visibility} --description "Game built with AI Game Studio"`,
-    token,
-  );
+  ghExec(['repo', 'create', repoName, visibility, '--description', 'Game built with AI Game Studio'], token);
 
-  const remote = `https://x-access-token:${token}@github.com/${repoName}.git`;
-  execSync(`git remote add origin ${remote} 2>/dev/null || git remote set-url origin ${remote}`, {
-    cwd: workspacePath,
-    stdio: 'pipe',
-  });
-
-  execSync('git push -u origin main --force', {
-    cwd: workspacePath,
-    encoding: 'utf-8',
-    stdio: 'pipe',
-    timeout: 30_000,
-  });
+  const remote = `https://github.com/${repoName}.git`;
+  try { gitExec(['remote', 'remove', 'origin'], workspacePath); } catch { /* no existing remote */ }
+  gitExec(['remote', 'add', 'origin', remote], workspacePath);
+  gitExec(['push', '-u', 'origin', 'main', '--force'], workspacePath, token);
 
   let pagesUrl: string | undefined;
   try {
-    pagesUrl = ghExec(
-      `api /repos/${repoName}/pages --method POST -f source[branch]=main -f source[path]=/`,
-      token,
-    );
+    pagesUrl = ghExec(['api', `/repos/${repoName}/pages`, '--method', 'POST', '-f', 'source[branch]=main', '-f', 'source[path]=/'], token);
     const parsed = JSON.parse(pagesUrl);
     pagesUrl = parsed.html_url as string;
   } catch {
@@ -191,18 +209,10 @@ async function pushWithApi(
 ): Promise<GitHubPushResult> {
   const { full_name } = await createRepoApi(token, repoName, isPrivate);
 
-  const remote = `https://x-access-token:${token}@github.com/${full_name}.git`;
-  execSync(`git remote add origin ${remote} 2>/dev/null || git remote set-url origin ${remote}`, {
-    cwd: workspacePath,
-    stdio: 'pipe',
-  });
-
-  execSync('git push -u origin main --force', {
-    cwd: workspacePath,
-    encoding: 'utf-8',
-    stdio: 'pipe',
-    timeout: 30_000,
-  });
+  const remote = `https://github.com/${full_name}.git`;
+  try { gitExec(['remote', 'remove', 'origin'], workspacePath); } catch { /* no existing remote */ }
+  gitExec(['remote', 'add', 'origin', remote], workspacePath);
+  gitExec(['push', '-u', 'origin', 'main', '--force'], workspacePath, token);
 
   const [owner, repo] = full_name.split('/');
   let pagesUrl: string | undefined;

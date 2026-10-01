@@ -20,6 +20,7 @@ export default function GamePreview({ gameUrl, onError, isBuilding, githubRepoUr
   const [fullscreen, setFullscreen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Listen for postMessage from iframe
   useEffect(() => {
@@ -43,6 +44,10 @@ export default function GamePreview({ gameUrl, onError, isBuilding, githubRepoUr
   // Reset loaded when game URL changes
   useEffect(() => {
     setLoaded(false);
+    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+    return () => {
+      if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+    };
   }, [gameUrl]);
 
   const handleRefresh = useCallback(() => {
@@ -157,7 +162,11 @@ export default function GamePreview({ gameUrl, onError, isBuilding, githubRepoUr
               title="Game Preview"
               onLoad={() => {
                 // If the iframe loads but doesn't send game-ready, mark as loaded
-                setTimeout(() => setLoaded(true), 1000);
+                if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+                const iframe = iframeRef.current;
+                loadTimerRef.current = setTimeout(() => {
+                  if (iframe === iframeRef.current) setLoaded(true);
+                }, 1000);
               }}
             />
 

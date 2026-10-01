@@ -76,7 +76,7 @@ export interface AgentSession {
   sendMessage(content: string, signal?: AbortSignal): Promise<AgentResponse>;
   sendMessageStream(
     content: string,
-    onEvent: (event: StreamEvent) => void,
+    onEvent: (event: StreamEvent) => void | Promise<void>,
     signal?: AbortSignal,
   ): Promise<AgentResponse>;
   getHistory(): AgentMessage[];

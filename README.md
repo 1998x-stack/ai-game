@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square" alt="Build">
-  <img src="https://img.shields.io/badge/tests-84%20passing-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-105%20passing-brightgreen?style=flat-square" alt="Tests">
   <img src="https://img.shields.io/badge/tools-11-brightgreen?style=flat-square" alt="Tools">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs">
 </p>
@@ -65,7 +65,7 @@ Game plans are extracted from `todo.md` and rendered as interactive progress car
 | 🔄 **Iterative Refinement** | Multi-turn conversations refine every aspect — speed, scoring, visuals, mechanics. |
 | 🧠 **Knowledge Flywheel** | 4 game templates, 20+ gotcha rules, complete Canvas UI guide. Utils and gotchas are agent-extensible. |
 | 📦 **Self-Contained Builds** | All scripts + assets → single HTML file. Zero external dependencies. Pure Canvas + JavaScript. |
-| 🔌 **BYO-Key Architecture** | Bring your own DeepSeek API key. No server-side key storage. OpenAI-compatible endpoints supported. |
+| 🔌 **BYO-Key Architecture** | Bring your own DeepSeek API key. No persistent server-side key storage. |
 | 🌐 **Session Persistence** | JSONL file-based persistence survives server restarts. `?session={id}` restores full conversation + game state. |
 
 ---
@@ -109,7 +109,7 @@ npm run dev
 │  │  ✅ Build OK!   │  │                                            │
 │  └────────────────┘  │                                            │
 ├──────────────────────┴───────────────────────────────────────────┤
-│                   Agent Pipeline (11 tools)                        │
+│                   Agent Pipeline (15 tools)                        │
 │   System Prompt → Scaffold Docs → Gotchas → Templates → Tool Loop  │
 │         ↓                     ↓                                    │
 │   scripts/game.js      build_game → output/index.html              │
@@ -131,7 +131,7 @@ npm run dev
 | Sandbox | iframe `allow-scripts` |
 | Persistence | JSONL files + in-memory Map |
 
-### Agent Tool Registry (11 tools)
+### Agent Tool Registry (15 tools)
 
 | Tool | Parameters | Purpose |
 |---|---|---|
@@ -146,6 +146,10 @@ npm run dev
 | `set_error` | `message` | Report unrecoverable errors |
 | `delegate_subagent` | `instruction` | Spawn research subagents (max 3) |
 | `game_runtime` | `maxSteps`, `fps` | Automated edge-case testing |
+| `git_log` | `count` | Inspect session commit history |
+| `git_diff` | `staged` | Inspect workspace changes |
+| `git_status` | — | Inspect workspace status |
+| `github_push` | `repoName`, `private` | Publish a built game (token-gated) |
 
 ---
 
@@ -192,7 +196,7 @@ ai-game/
 │   ├── skills-system.md          # Skill system design
 │   └── adr/                      # Architecture Decision Records
 ├── assets/                       # GitHub Pages landing page
-├── __tests__/                    # 84 test cases (Vitest)
+├── __tests__/                    # 105 test cases (Vitest)
 └── CONTEXT.md                    # Domain context glossary
 ```
 

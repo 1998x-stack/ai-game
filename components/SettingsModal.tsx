@@ -172,7 +172,7 @@ export default function SettingsModal({ open, onClose, onSave }: Props) {
                 {showGhToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-xs text-panel-muted mt-1">Personal access token with "repo" scope for game publishing.</p>
+            <p className="text-xs text-panel-muted mt-1">Personal access token with &quot;repo&quot; scope for game publishing.</p>
           </div>
 
           {/* Model */}

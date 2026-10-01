@@ -11,6 +11,7 @@ import {
   ToolResult,
 } from './types';
 import { getOpenAITools, toolRegistry } from './tools';
+import { executeTool } from './tool-kernel';
 import { CONFIG } from '@/lib/config';
 
 function toOpenAIMessages(
@@ -80,6 +81,7 @@ export class DeepSeekAgent implements AgentSession {
   private messages: AgentMessage[];
   private maxIterations: number;
   private toolTimeout: number;
+  private operation: Promise<unknown> = Promise.resolve();
 
   constructor(
     config: AgentConfig,
@@ -100,8 +102,10 @@ export class DeepSeekAgent implements AgentSession {
   }
 
   async sendMessage(content: string, signal?: AbortSignal): Promise<AgentResponse> {
-    this.messages.push({ role: 'user', content });
-    return this.agentLoop(undefined, signal);
+    return this.enqueue(async () => {
+      this.messages.push({ role: 'user', content });
+      return this.agentLoop(undefined, signal);
+    });
   }
 
   async sendMessageStream(
@@ -109,12 +113,20 @@ export class DeepSeekAgent implements AgentSession {
     onEvent: (event: StreamEvent) => void,
     signal?: AbortSignal,
   ): Promise<AgentResponse> {
-    this.messages.push({ role: 'user', content });
-    return this.agentLoop(onEvent, signal);
+    return this.enqueue(async () => {
+      this.messages.push({ role: 'user', content });
+      return this.agentLoop(onEvent, signal);
+    });
+  }
+
+  private enqueue<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.operation.then(work, work);
+    this.operation = run.then(() => undefined, () => undefined);
+    return run;
   }
 
   private async agentLoop(
-    onEvent?: (event: StreamEvent) => void,
+    onEvent?: (event: StreamEvent) => void | Promise<void>,
     signal?: AbortSignal,
   ): Promise<AgentResponse> {
     const allToolCalls: ToolCall[] = [];
@@ -151,10 +163,10 @@ export class DeepSeekAgent implements AgentSession {
           .reasoning_content as string | undefined;
 
       if (reasoningContent) {
-        onEvent?.({ type: 'reasoning', content: reasoningContent });
+        await onEvent?.({ type: 'reasoning', content: reasoningContent });
       }
       if (assistantContent) {
-        onEvent?.({ type: 'message', content: assistantContent });
+        await onEvent?.({ type: 'message', content: assistantContent });
       }
 
       const agentMsg: AgentMessage = {
@@ -172,7 +184,7 @@ export class DeepSeekAgent implements AgentSession {
         allToolCalls.push(...parsedCalls);
 
         for (const tc of parsedCalls) {
-          onEvent?.({
+          await onEvent?.({
             type: 'tool_call',
             name: tc.name,
             arguments: tc.arguments,
@@ -206,7 +218,7 @@ export class DeepSeekAgent implements AgentSession {
           tool_call_id: result.id,
         });
 
-        onEvent?.({
+        await onEvent?.({
           type: 'tool_result',
           name: result.name,
           result: result.result,
@@ -219,7 +231,7 @@ export class DeepSeekAgent implements AgentSession {
       finishReason = allToolCalls.length > 0 ? 'tool_calls' : 'length';
     }
 
-    onEvent?.({ type: 'done' });
+    await onEvent?.({ type: 'done' });
 
     return {
       message: finalMessage,
@@ -267,14 +279,7 @@ export class DeepSeekAgent implements AgentSession {
     name: string,
     args: Record<string, unknown>,
   ): Promise<string> {
-    const tool = toolRegistry.find((t) => t.definition.name === name);
-    if (!tool) throw new Error(`Unknown tool: ${name}`);
-    return Promise.race([
-      tool.handler(args, this.workspaceRoot, this.config),
-      new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error(`Tool "${name}" timed out after ${this.toolTimeout}ms`)), this.toolTimeout),
-      ),
-    ]);
+    return executeTool(toolRegistry, name, args, this.workspaceRoot, this.config, 'master', this.toolTimeout);
   }
 
   private async createCompletion(

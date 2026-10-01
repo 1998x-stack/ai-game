@@ -39,7 +39,7 @@
                                   │ 工作区管理器             │  │
                                   │ - 会话隔离               │  │
                                   │ - 脚手架复制             │  │
-                                  │ - agent.md 生成          │  │
+                                  │ - agent.md 注入          │  │
                                   │ - JSONL 持久化           │  │
                                   └────────────┬────────────┘  │
                                                │                │
@@ -155,7 +155,7 @@ workspace/              ← 脚手架知识库 (Agent 的权威参考)
 
 | 决策 | 理由 |
 |------|------|
-| **工厂模式 Agent SDK** | 支持多 Provider 扩展 (DeepSeek/OpenAI/Claude) |
+| **工厂模式 Agent SDK** | 当前只实现 DeepSeek；新增 Provider 需先注册 Adapter |
 | **纯 HTML5 Canvas** | 零 WebAssembly，生成的游戏为独立 HTML 文件 |
 | **逻辑工作区隔离** | 路径校验 + agent.md 约束。OS 级容器化 (v2) |
 | **BYO-Key 架构** | 用户自带 API Key，服务端不存储 |

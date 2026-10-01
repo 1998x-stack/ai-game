@@ -12,11 +12,11 @@ import { generateTestScenario, type TestAction } from '@/lib/runtime/test-engine
 import { injectPerfMonitor, extractPerfMetrics } from '@/lib/runtime/perf-monitor';
 import { generateTextReport } from '@/lib/runtime/report-generator';
 import { getBrowserPool } from '@/lib/runtime/browser-pool';
+import { runDetectionRules, type RuntimeIssue } from '@/lib/runtime/engine';
+import { validateBaseUrl, validateWorkspacePath, redactSecrets } from '@/lib/security/validation';
+import { executeTool } from './tool-kernel';
 
 function validatePath(userPath: string, workspaceRoot: string): string {
-  if (userPath.includes('..')) {
-    throw new Error(`Path traversal not allowed (contains ".."): ${userPath}`);
-  }
   // Verify workspace root itself is under user_space/
   const rootSegments = workspaceRoot.split(path.sep);
   if (!rootSegments.includes('user_space')) {
@@ -24,23 +24,7 @@ function validatePath(userPath: string, workspaceRoot: string): string {
       `Workspace root must be under user_space/: ${workspaceRoot}`,
     );
   }
-  const resolved = path.resolve(workspaceRoot, userPath);
-  let realResolved: string;
-  try {
-    realResolved = fs.realpathSync(resolved);
-  } catch {
-    realResolved = path.resolve(resolved);
-  }
-  const rootBoundary = workspaceRoot.endsWith(path.sep)
-    ? workspaceRoot
-    : workspaceRoot + path.sep;
-  if (
-    realResolved !== workspaceRoot &&
-    !realResolved.startsWith(rootBoundary)
-  ) {
-    throw new Error(`Path is outside workspace root: ${userPath}`);
-  }
-  return resolved;
+  return validateWorkspacePath(userPath, workspaceRoot);
 }
 
 const readFileDef: ToolDefinition = {
@@ -237,7 +221,9 @@ async function readFileHandler(args: Record<string, unknown>, root: string) {
   const lines = content.split('\n');
   const totalLines = lines.length;
   const offset = typeof args.offset === 'number' ? Math.max(1, Math.floor(args.offset)) : 1;
-  const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : CONFIG.tools.readFileDefaultLimit;
+  const limit = typeof args.limit === 'number'
+    ? Math.min(CONFIG.tools.readFileDefaultLimit, Math.max(1, Math.floor(args.limit)))
+    : CONFIG.tools.readFileDefaultLimit;
   const start = offset - 1;
   const end = limit ? Math.min(start + limit, totalLines) : totalLines;
 
@@ -261,7 +247,11 @@ async function writeFileHandler(args: Record<string, unknown>, root: string) {
     );
   }
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, String(args.content), 'utf-8');
+  const content = String(args.content);
+  if (Buffer.byteLength(content, 'utf8') > CONFIG.agent.maxMessageLength) {
+    throw new Error(`File content exceeds ${CONFIG.agent.maxMessageLength} bytes`);
+  }
+  fs.writeFileSync(p, content, 'utf-8');
   return `Successfully wrote ${p}`;
 }
 async function editFileHandler(args: Record<string, unknown>, root: string) {
@@ -401,6 +391,9 @@ async function writeTodoHandler(args: Record<string, unknown>, root: string) {
     throw new Error('tasks must be a non-empty array of { task: string, status: "pending" | "done", verify: string }');
   }
 
+  if (tasks.some((t) => !t || (t.status !== 'pending' && t.status !== 'done') || typeof t.task !== 'string' || (t.verify !== undefined && typeof t.verify !== 'string'))) {
+    throw new Error('Each task must contain string task/verify and status pending or done');
+  }
   const lines = tasks.map((t) => {
     const checkbox = t.status === 'done' ? '[x]' : '[ ]';
     const verifyNote = t.verify ? ` — verify: ${t.verify}` : '';
@@ -408,7 +401,7 @@ async function writeTodoHandler(args: Record<string, unknown>, root: string) {
   });
   const content = `# Game Plan\n\n${lines.join('\n')}\n`;
 
-  fs.writeFileSync(path.join(root, 'todo.md'), content, 'utf-8');
+  fs.writeFileSync(validateWorkspacePath('todo.md', root, true), content, 'utf-8');
 
   const done = tasks.filter((t) => t.status === 'done').length;
   const pending = tasks.filter((t) => t.status === 'pending').length;
@@ -641,14 +634,15 @@ async function delegateSubagentHandler(
 
           let toolResult: string;
           try {
-            const entry = toolRegistry.find(
-              (t) => t.definition.name === tc.function.name,
+            toolResult = await executeTool(
+              toolRegistry,
+              tc.function.name,
+              toolArgs,
+              root,
+              config,
+              'subagent',
+              subagentTimeout,
             );
-            if (!entry) {
-              toolResult = `Error: Tool "${tc.function.name}" is not available to subagents.`;
-            } else {
-              toolResult = await entry.handler(toolArgs, root);
-            }
           } catch (err: unknown) {
             toolResult = `Error: ${err instanceof Error ? err.message : String(err)}`;
           }
@@ -750,56 +744,6 @@ async function extractGameState(page: any): Promise<Record<string, unknown>> {
   });
 }
 
-interface RuntimeIssue {
-  id: string;
-  severity: 'error' | 'warning' | 'info';
-  category: string;
-  title: string;
-  description: string;
-  fixSuggestion: string;
-}
-
-function runDetectionRules(
-  finalState: Record<string, unknown>,
-  stateHistory: Record<string, unknown>[],
-): RuntimeIssue[] {
-  const issues: RuntimeIssue[] = [];
-
-  const canvas = finalState._canvas as { width: number; height: number } | undefined;
-  if (!canvas || canvas.width === 0 || canvas.height === 0) {
-    issues.push({
-      id: 'zero-canvas', severity: 'error', category: 'rendering',
-      title: 'Canvas dimensions are zero',
-      description: 'Canvas width/height is 0. Game may not render properly.',
-      fixSuggestion: 'Use setupCanvas("gameCanvas", 800, 600) or set canvas.width/height manually.',
-    });
-  }
-
-  const scoreVals = stateHistory
-    .map(s => parseFloat(String((s as any).score || s.score || '0')))
-    .filter(v => !isNaN(v));
-  if (scoreVals.length > 1 && scoreVals.every(v => v === scoreVals[0])) {
-    issues.push({
-      id: 'stagnant-score', severity: 'warning', category: 'game-logic',
-      title: 'Score unchanged throughout test',
-      description: 'Score remained constant across all test steps. Scoring logic may not be working.',
-      fixSuggestion: 'Ensure score increments on game events (food collection, enemy destruction, etc.).',
-    });
-  }
-
-  const goKeys = ['gameOver', 'gameover', 'isGameOver'];
-  if (goKeys.every(k => finalState[k] !== 'true' && finalState[k] !== true) && stateHistory.length > 0) {
-    issues.push({
-      id: 'no-game-over', severity: 'info', category: 'game-logic',
-      title: 'Game over not triggered',
-      description: 'Game did not trigger a game-over state during the test. This may be normal.',
-      fixSuggestion: 'If the game should have ended during the test, verify game-over conditions.',
-    });
-  }
-
-  return issues;
-}
-
 async function executeAction(page: any, action: TestAction): Promise<void> {
   switch (action.type) {
     case 'keyboard':
@@ -838,14 +782,14 @@ async function gameRuntimeHandler(
     return 'Error: game_runtime requires agent configuration.';
   }
 
-  const maxSteps =
-    typeof args.maxSteps === 'number'
-      ? Math.floor(args.maxSteps)
-      : CONFIG.gameRuntime.defaultMaxSteps;
-  const fps =
-    typeof args.fps === 'number'
-      ? Math.floor(args.fps)
-      : CONFIG.gameRuntime.defaultFps;
+  const maxSteps = Math.min(
+    100,
+    Math.max(1, typeof args.maxSteps === 'number' ? Math.floor(args.maxSteps) : CONFIG.gameRuntime.defaultMaxSteps),
+  );
+  const fps = Math.min(
+    60,
+    Math.max(1, typeof args.fps === 'number' ? Math.floor(args.fps) : CONFIG.gameRuntime.defaultFps),
+  );
   const stepDelay = Math.round(1000 / fps);
 
   const outputPath = path.join(root, 'output', 'index.html');
@@ -871,6 +815,9 @@ async function gameRuntimeHandler(
   const testReport: string[] = [];
   const stateHistory: Record<string, unknown>[] = [];
   const startTime = Date.now();
+  const deadline = startTime + CONFIG.gameRuntime.maxTotalTimeMs;
+  let apiCalls = 0;
+  let incomplete = false;
 
   let poolId: string | undefined;
   try {
@@ -883,11 +830,12 @@ async function gameRuntimeHandler(
     await page.evaluate(injectPerfMonitor());
 
     // Wait for game to initialize
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(CONFIG.gameRuntime.initWaitMs);
 
     if (scenario) {
       // Layer 2: Pre-defined test scenario for known game types
       for (let i = 0; i < scenario.actions.length; i++) {
+        if (Date.now() >= deadline) { incomplete = true; break; }
         const action = scenario.actions[i];
         await executeAction(page, action);
 
@@ -919,6 +867,11 @@ async function gameRuntimeHandler(
       });
 
       for (let step = 0; step < maxSteps; step++) {
+        if (Date.now() >= deadline || apiCalls >= CONFIG.gameRuntime.maxApiCallsPerTest) {
+          incomplete = true;
+          testReport.push(`Step ${step + 1}: Runtime budget exhausted.`);
+          break;
+        }
         const state = await extractGameState(page);
         stateHistory.push(state);
 
@@ -941,6 +894,7 @@ async function gameRuntimeHandler(
         // Ask model for next action
         let action = 'none';
         try {
+          apiCalls++;
           const response = await client.chat.completions.create({
             model: fallbackModel,
             messages: [
@@ -962,6 +916,7 @@ async function gameRuntimeHandler(
           // Clean up any extra text
           action = action.replace(/[^a-zA-Z]/g, '');
         } catch {
+          incomplete = true;
           testReport.push(
             `Step ${step + 1}: Model API call failed, stopping test.`,
           );
@@ -1000,6 +955,7 @@ async function gameRuntimeHandler(
       testReport.length,
       fps,
       durationSec,
+      incomplete ? 'incomplete' : (runtimeIssues.some((issue) => issue.severity === 'error') ? 'failed' : 'passed'),
     );
 
   } catch (err: unknown) {

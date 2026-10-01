@@ -2,6 +2,7 @@ import { getWorkspace } from '@/lib/workspace/manager';
 import fs from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
+import { hasSessionCapability } from '@/lib/session/capability';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,6 +18,9 @@ export async function GET(
     // Validate sessionId format — prevent path traversal
     if (!UUID_RE.test(sessionId)) {
       return new NextResponse('Invalid session ID format', { status: 400 });
+    }
+    if (!hasSessionCapability(sessionId)) {
+      return new NextResponse('Session capability required', { status: 403 });
     }
 
     // Try in-memory Map first, then fall back to filesystem (Map may be

@@ -1,4 +1,6 @@
 import { chromium, Browser, Page } from 'playwright';
+import crypto from 'crypto';
+import { CONFIG } from '@/lib/config';
 
 interface PooledBrowser {
   browser: Browser;
@@ -8,97 +10,97 @@ interface PooledBrowser {
   activePages: number;
 }
 
+interface Lease {
+  entry: PooledBrowser;
+  page: Page;
+}
+
 class BrowserPool {
   private pool: PooledBrowser[] = [];
+  private leases = new Map<string, Lease>();
+  private waiters: Array<(value: { browser: Browser; page: Page; id: string }) => void> = [];
   private maxInstances: number;
+  private maxPagesPerInstance: number;
   private idleTimeoutMs: number;
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(config: { maxInstances?: number; idleTimeoutMs?: number } = {}) {
-    this.maxInstances = config.maxInstances || 3;
-    this.idleTimeoutMs = config.idleTimeoutMs || 300_000;
-    this.timer = setInterval(() => this.evictIdle(), 60_000);
+  constructor(config: { maxInstances?: number; idleTimeoutMs?: number; maxPagesPerInstance?: number } = {}) {
+    this.maxInstances = config.maxInstances ?? CONFIG.gameRuntime.browserPool.maxInstances;
+    this.maxPagesPerInstance = config.maxPagesPerInstance ?? CONFIG.gameRuntime.browserPool.maxPagesPerInstance;
+    this.idleTimeoutMs = config.idleTimeoutMs ?? CONFIG.gameRuntime.browserPool.idleTimeoutMs;
+    this.timer = setInterval(() => this.evictIdle(), CONFIG.gameRuntime.browserPool.cleanupIntervalMs);
   }
 
   async acquire(): Promise<{ browser: Browser; page: Page; id: string }> {
-    // Reuse idle instance
-    const idle = this.pool.find(p => p.activePages < 5);
-    if (idle) {
-      const page = await idle.browser.newPage();
-      idle.pages.set(String(Date.now()), page);
-      idle.activePages++;
-      idle.lastUsedAt = Date.now();
-      return { browser: idle.browser, page, id: String(idle.createdAt) };
-    }
-
-    // Create new if under limit
-    if (this.pool.length < this.maxInstances) {
-      const browser = await chromium.launch({ headless: true });
-      const entry: PooledBrowser = { browser, pages: new Map(), createdAt: Date.now(), lastUsedAt: Date.now(), activePages: 0 };
-      this.pool.push(entry);
-      const page = await browser.newPage();
-      entry.pages.set(String(entry.createdAt), page);
-      entry.activePages = 1;
-      return { browser, page, id: String(entry.createdAt) };
-    }
-
-    // Evict oldest and reuse
-    const oldest = this.pool.sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0];
-    for (const [, p] of oldest.pages) await p.close().catch(() => {});
-    oldest.pages.clear();
-    const page = await oldest.browser.newPage();
-    oldest.pages.set(String(Date.now()), page);
-    oldest.activePages = 1;
-    oldest.lastUsedAt = Date.now();
-    return { browser: oldest.browser, page, id: String(oldest.createdAt) };
+    const available = await this.tryAcquire();
+    if (available) return available;
+    return new Promise((resolve) => this.waiters.push(resolve));
   }
 
-  release(browserId: string): void {
-    const entry = this.pool.find(p => String(p.createdAt) === browserId);
-    if (entry) {
-      entry.activePages = Math.max(0, entry.activePages - 1);
-      entry.lastUsedAt = Date.now();
+  private async tryAcquire(): Promise<{ browser: Browser; page: Page; id: string } | null> {
+    let entry = this.pool.find((candidate) => candidate.activePages < this.maxPagesPerInstance);
+    if (!entry) {
+      if (this.pool.length >= this.maxInstances) return null;
+      const browser = await chromium.launch({ headless: true });
+      entry = { browser, pages: new Map(), createdAt: Date.now(), lastUsedAt: Date.now(), activePages: 0 };
+      this.pool.push(entry);
+    }
+    const id = `${entry.createdAt}-${crypto.randomUUID()}`;
+    const page = await entry.browser.newPage();
+    entry.pages.set(id, page);
+    entry.activePages++;
+    entry.lastUsedAt = Date.now();
+    this.leases.set(id, { entry, page });
+    return { browser: entry.browser, page, id };
+  }
+
+  release(id: string): void {
+    const lease = this.leases.get(id);
+    if (!lease) return;
+    this.leases.delete(id);
+    lease.entry.pages.delete(id);
+    lease.entry.activePages = Math.max(0, lease.entry.activePages - 1);
+    lease.entry.lastUsedAt = Date.now();
+    void lease.page.close().catch(() => {});
+    void this.drainWaiters();
+  }
+
+  private async drainWaiters(): Promise<void> {
+    while (this.waiters.length > 0) {
+      const available = await this.tryAcquire();
+      if (!available) return;
+      this.waiters.shift()!(available);
     }
   }
 
   private evictIdle(): void {
     const now = Date.now();
-    this.pool = this.pool.filter(entry => {
-      if ((now - entry.lastUsedAt) > this.idleTimeoutMs && entry.activePages === 0) {
-        entry.browser.close().catch(() => {});
-        return false;
-      }
-      return true;
-    });
+    const idle = this.pool.filter((entry) => entry.activePages === 0 && now - entry.lastUsedAt > this.idleTimeoutMs);
+    for (const entry of idle) {
+      void entry.browser.close().catch(() => {});
+      this.pool = this.pool.filter((candidate) => candidate !== entry);
+    }
+    void this.drainWaiters();
   }
 
   async shutdown(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
-    await Promise.all(this.pool.map(e => e.browser.close().catch(() => {})));
+    this.timer = null;
+    this.waiters.splice(0).forEach(() => {});
+    await Promise.all(this.pool.map((entry) => entry.browser.close().catch(() => {})));
     this.pool = [];
+    this.leases.clear();
   }
 }
 
-// Process-level singleton + HMR safe
 let globalPool: BrowserPool | null = null;
 
 export function getBrowserPool(): BrowserPool {
-  if (!globalPool) {
-    globalPool = new BrowserPool({ maxInstances: 3, idleTimeoutMs: 300_000 });
-  }
+  if (!globalPool) globalPool = new BrowserPool();
   return globalPool;
 }
 
-/** For testing: reset the singleton so each test starts fresh */
 export function resetBrowserPool(): void {
-  globalPool?.shutdown();
+  void globalPool?.shutdown();
   globalPool = null;
-}
-
-// HMR safety
-if (typeof module !== 'undefined' && (module as any).hot) {
-  (module as any).hot.dispose(() => {
-    globalPool?.shutdown();
-    globalPool = null;
-  });
 }

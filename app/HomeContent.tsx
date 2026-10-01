@@ -49,17 +49,33 @@ export default function HomeContent() {
   const [isPushing, setIsPushing] = useState(false);
 
   const isDragging = useRef(false);
+  const activeRequestRef = useRef<AbortController | null>(null);
+
+  const createRemoteSession = useCallback(async () => {
+    const res = await fetch('/api/session', { method: 'POST' });
+    if (!res.ok) throw new Error('Could not create a session');
+    const data = await res.json() as { sessionId: string };
+    return data.sessionId;
+  }, []);
 
   // Initialize session ID — check URL param first, otherwise new UUID
   useEffect(() => {
+    let cancelled = false;
     const params = new URLSearchParams(window.location.search);
     const urlSessionId = params.get('session');
     if (urlSessionId) {
       setSessionId(urlSessionId);
     } else {
-      setSessionId(crypto.randomUUID());
+      createRemoteSession().then((id) => {
+        if (cancelled) return;
+        setSessionId(id);
+        window.history.replaceState(null, '', `/?session=${id}`);
+      }).catch(() => {
+        if (!cancelled) setSessionId(crypto.randomUUID());
+      });
     }
-  }, []);
+    return () => { cancelled = true; };
+  }, [createRemoteSession]);
 
   // Load session from API when sessionId comes from URL param
   useEffect(() => {
@@ -168,16 +184,20 @@ export default function HomeContent() {
       setMessages((prev) => [...prev, userMsg]);
       setIsGenerating(true);
 
+      const controller = new AbortController();
+      activeRequestRef.current = controller;
+      const requestSessionId = sessionId;
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sessionId,
+            sessionId: requestSessionId,
             message: content,
             stream: true,
             config: settings,
           }),
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -266,6 +286,7 @@ export default function HomeContent() {
           }
         }
 
+        if (requestSessionId !== sessionId) return;
         if (!streamedContent && streamedToolCalls.length > 0) {
           agentMsg.content = 'Done.';
         }
@@ -281,6 +302,7 @@ export default function HomeContent() {
         };
         setMessages((prev) => [...prev, errMsg]);
       } finally {
+        if (activeRequestRef.current === controller) activeRequestRef.current = null;
         setIsGenerating(false);
       }
     },
@@ -294,17 +316,27 @@ export default function HomeContent() {
       return;
     }
     doNewGame();
+  // doNewGame is declared below; the callback is only invoked after render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, gameUrl]);
 
-  const doNewGame = useCallback(() => {
-    setSessionId(crypto.randomUUID());
+  const doNewGame = useCallback(async () => {
+    activeRequestRef.current?.abort();
+    let newSessionId: string;
+    try {
+      newSessionId = await createRemoteSession();
+    } catch {
+      newSessionId = crypto.randomUUID();
+    }
+    window.history.replaceState(null, '', `/?session=${newSessionId}`);
+    setSessionId(newSessionId);
     setMessages([]);
     setGameUrl(null);
     setErrors([]);
     setTodoUpdate(null);
     setGithubRepoUrl(null);
     setConfirmNewGame(false);
-  }, []);
+  }, [createRemoteSession]);
 
   const handleSettingsSave = useCallback((s: AppSettings) => {
     setSettings(s);

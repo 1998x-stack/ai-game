@@ -2,7 +2,7 @@
 
 ## 概述
 
-Agent SDK 是 AI Game Studio 的核心引擎，负责将用户的自然语言请求转化为游戏代码。采用工厂模式设计，当前支持 DeepSeek API（OpenAI 兼容），可扩展至 Claude、OpenAI 等 Provider。
+Agent SDK 是 AI Game Studio 的核心引擎，负责将用户的自然语言请求转化为游戏代码。采用工厂模式设计，当前只实现 DeepSeek Adapter；其他 Provider 只有在完成独立 Adapter、工具契约和测试后才可加入。
 
 ## 架构
 

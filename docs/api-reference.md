@@ -29,7 +29,7 @@ Agent 聊天接口，支持流式 (SSE) 和非流式两种模式。
 | `sessionId` | string | ✅ | UUID 格式会话 ID |
 | `message` | string | ✅ | 用户消息 (最大 50,000 字符) |
 | `stream` | boolean | ❌ | 是否使用 SSE 流式 (默认 false) |
-| `config.provider` | string | ✅ | DeepSeek / OpenAI / Claude |
+| `config.provider` | string | ✅ | DeepSeek |
 | `config.apiKey` | string | ✅ | API Key |
 | `config.model` | string | ✅ | 模型名称 |
 | `config.baseUrl` | string | ✅ | API 端点 URL |

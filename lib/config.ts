@@ -75,7 +75,8 @@ export const CONFIG = {
 
   // ── Providers ──
   providers: {
-    allowed: Object.freeze(new Set(['deepseek', 'openai', 'claude'])),
+    allowed: Object.freeze(new Set(['deepseek'])),
+    allowedBaseHosts: ['api.deepseek.com'] as const,
     deepseek: {
       defaultBaseUrl: 'https://api.deepseek.com',
       defaultModel: 'deepseek-v4-pro',
@@ -84,6 +85,12 @@ export const CONFIG = {
   },
 
   // ── Workspace ──
+  build: {
+    maxScriptBytes: 2_000_000,
+    maxAssetBytes: 10_000_000,
+    maxTotalAssetBytes: 25_000_000,
+    maxHtmlBytes: 40_000_000,
+  },
   workspace: {
     maxActiveSessions: 100,
     staleCleanupMs: 3_600_000, // 1 hour

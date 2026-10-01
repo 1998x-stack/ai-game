@@ -18,6 +18,7 @@ const TEMPLATE_SCENARIOS: Record<string, (mode: string) => TestScenario> = {
   snake: (mode) => ({
     name: 'Snake: direction switching', tier: 'template',
     actions: [
+      { type: 'keyboard', key: 'Space', duration: 200 },
       { type: 'keyboard', key: 'ArrowRight', duration: 300 },
       { type: 'keyboard', key: 'ArrowUp', duration: 300 },
       { type: 'keyboard', key: 'ArrowLeft', duration: 300 },
@@ -27,6 +28,7 @@ const TEMPLATE_SCENARIOS: Record<string, (mode: string) => TestScenario> = {
   breakout: (mode) => ({
     name: 'Breakout: paddle + ball', tier: 'template',
     actions: [
+      { type: 'keyboard', key: 'Space', duration: 200 },
       { type: 'wait', duration: 2000 },
       { type: 'keyboard_hold', key: 'ArrowLeft', duration: 500 },
       { type: 'keyboard_hold', key: 'ArrowRight', duration: 1000 },
@@ -36,6 +38,7 @@ const TEMPLATE_SCENARIOS: Record<string, (mode: string) => TestScenario> = {
   tetris: () => ({
     name: 'Tetris: rotate + move', tier: 'template',
     actions: [
+      { type: 'keyboard', key: 'Space', duration: 200 },
       { type: 'keyboard', key: 'ArrowUp', duration: 200 },
       { type: 'keyboard', key: 'ArrowLeft', duration: 200 },
       { type: 'keyboard', key: 'ArrowDown', duration: 100 },

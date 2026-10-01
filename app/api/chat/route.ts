@@ -1,12 +1,15 @@
-import { createWorkspace, restoreWorkspace, getWorkspace } from '@/lib/workspace/manager';
+import { getWorkspace } from '@/lib/workspace/manager';
 import { createAgent } from '@/lib/agent/factory';
 import type { AgentSession } from '@/lib/agent/types';
 import { readScaffoldDocs, getGotchas } from '@/lib/scaffold/reader';
-import { agentSessions, appendToJsonl, readJsonl, jsonlExists } from '@/lib/session-store';
+import { agentSessions, readJsonl, jsonlExists } from '@/lib/session-store';
 import { CONFIG } from '@/lib/config';
 import { gitCommit } from '@/lib/git';
 import fs from 'fs/promises';
 import path from 'path';
+import { redactSecrets, validateBaseUrl } from '@/lib/security/validation';
+import { hasSessionCapability } from '@/lib/session/capability';
+import { appendSessionDelta, restoreSessionWorkspace, withSessionLock } from '@/lib/session/session-module';
 
 const UUID_RE = CONFIG.validation.uuidPattern;
 const MAX_MESSAGE_LENGTH = CONFIG.agent.maxMessageLength;
@@ -58,6 +61,7 @@ async function handleStreamingResponse(
   message: string,
   sessionId: string,
   signal?: AbortSignal,
+  requestConfig?: ChatRequest['config'],
 ): Promise<Response> {
   const encoder = new TextEncoder();
 
@@ -96,32 +100,13 @@ async function handleStreamingResponse(
       };
 
       try {
-        await agent.sendMessageStream(message, async (event) => {
+        await withSessionLock(sessionId, () => agent.sendMessageStream(message, async (event) => {
           if (event.type === 'tool_result' && event.name === 'build_game') {
             const workspace = getWorkspace(sessionId);
             if (workspace) {
-              const outputPath = path.join(
-                workspace.workspacePath,
-                'output',
-                'index.html',
-              );
-              fs.access(outputPath)
-                .then(() => {
-                  send({
-                    type: 'build_result',
-                    previewUrl: `/api/preview/${sessionId}`,
-                    success: true,
-                  });
-                  // Auto-commit successful build for development history
-                  gitCommit(workspace.workspacePath, 'Build: game update');
-                })
-                .catch(() => {
-                  send({
-                    type: 'build_result',
-                    previewUrl: `/api/preview/${sessionId}`,
-                    success: false,
-                  });
-                });
+              const success = event.result.startsWith('BUILD SUCCESS');
+              send({ type: 'build_result', previewUrl: `/api/preview/${sessionId}`, success });
+              if (success) gitCommit(workspace.workspacePath, 'Build: game update');
             }
           }
 
@@ -163,12 +148,12 @@ async function handleStreamingResponse(
           }
 
           send(event);
-        });
-        await appendToJsonl(sessionId, agent.getHistory());
+        }));
+        await appendSessionDelta(sessionId, agent.getHistory());
       } catch (error) {
         send({
           type: 'error',
-          message: error instanceof Error ? error.message : 'Internal server error',
+        message: redactSecrets(error instanceof Error ? error.message : 'Internal server error', [requestConfig?.apiKey, requestConfig?.githubToken]),
         });
       } finally {
         controller.close();
@@ -206,6 +191,9 @@ export async function POST(request: Request) {
     if (!UUID_RE.test(sessionId)) {
       return Response.json({ error: 'Invalid session ID format' }, { status: 400 });
     }
+    if (!hasSessionCapability(sessionId)) {
+      return Response.json({ error: 'Session capability required' }, { status: 403 });
+    }
 
     // Limit message size to prevent memory / API DoS
     if (message.length > MAX_MESSAGE_LENGTH) {
@@ -223,13 +211,13 @@ export async function POST(request: Request) {
       return Response.json({ error: msg }, { status: 400 });
     }
 
+    config.baseUrl = validateBaseUrl(config.baseUrl || CONFIG.providers.deepseek.defaultBaseUrl, CONFIG.providers.allowedBaseHosts);
+
     let agent = agentSessions.get(sessionId);
 
     if (!agent) {
       const isRestoring = jsonlExists(sessionId);
-      const workspace = isRestoring
-        ? await restoreWorkspace(sessionId)
-        : await createWorkspace(sessionId);
+      const workspace = await restoreSessionWorkspace(sessionId);
 
       const docs = await readScaffoldDocs();
       const gotchas = await getGotchas();
@@ -355,6 +343,7 @@ export async function POST(request: Request) {
           model: config.model,
           baseUrl: config.baseUrl,
           githubToken: config.githubToken,
+          fallbackModel: CONFIG.providers.deepseek.fallbackModel,
         },
         systemPrompt,
         workspace.workspacePath,
@@ -369,10 +358,10 @@ export async function POST(request: Request) {
     }
 
     if (body.stream) {
-      return handleStreamingResponse(agent, message, sessionId, request.signal);
+      return handleStreamingResponse(agent, message, sessionId, request.signal, config);
     }
 
-    const response = await agent.sendMessage(message, request.signal);
+    const response = await withSessionLock(sessionId, () => agent.sendMessage(message, request.signal));
 
     const hasBuildGame = response.toolCalls.some(
       (tc) => tc.name === 'build_game',
@@ -380,8 +369,18 @@ export async function POST(request: Request) {
     let buildResult: { previewUrl: string; success: boolean } | undefined;
 
     if (hasBuildGame) {
+      const lastBuildResult = [...agent.getHistory()].reverse().find((m) => m.role === 'tool' && /BUILD (SUCCESS|FAILED|CRASHED)/.test(m.content));
+      let buildSucceeded = lastBuildResult?.content.startsWith('BUILD SUCCESS') ?? false;
       const workspace = getWorkspace(sessionId);
-      if (workspace) {
+      if (workspace && !lastBuildResult) {
+        try {
+          await fs.access(path.join(workspace.workspacePath, 'output', 'index.html'));
+          buildSucceeded = true;
+        } catch {
+          buildSucceeded = false;
+        }
+      }
+      if (workspace && buildSucceeded) {
         const outputPath = path.join(
           workspace.workspacePath,
           'output',
@@ -399,7 +398,7 @@ export async function POST(request: Request) {
       }
     }
 
-    await appendToJsonl(sessionId, agent.getHistory());
+    await appendSessionDelta(sessionId, agent.getHistory());
 
     return Response.json({
       reply: response.message,
@@ -412,9 +411,7 @@ export async function POST(request: Request) {
   } catch (error) {
     let message = error instanceof Error ? error.message : 'Internal server error';
     // Redact API key from error messages
-    if (config?.apiKey && message.includes(config.apiKey)) {
-      message = message.replace(config.apiKey, '[REDACTED]');
-    }
+    message = redactSecrets(message, [config?.apiKey, config?.githubToken]);
     return Response.json(
       { error: message },
       { status: 500 },
