@@ -287,3 +287,12 @@ GDD mechanics are linked by stable reference IDs. Stale saves return 409,
 so Agent or another browser tab's changes cannot be silently overwritten.
 The read-only Code diff view shows changes to scripts/game.js. See
 [Stage 3.0 architecture](docs/stage-3.0-visual-workspace.md).
+
+## Stage 3.1 — Game Asset Library and Sprite Atlas
+
+Use the **Asset Library** tab in Design Canvas to import SHA-256-addressed
+PNG/JPEG/WebP images and WAV/Ogg/MP3 sounds. Record copyright/provenance labels,
+preview media, link it to asset nodes, and generate deterministic PNG
+spritesheets with frame coordinates. Catalog and blobs remain file-native;
+duplicates are reused and unsafe content is rejected. See
+[Stage 3.1 developer guide](docs/stage-3.1-asset-pipeline.md).

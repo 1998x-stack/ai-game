@@ -10,6 +10,7 @@ let server: ChildProcessWithoutNullStreams | null = null;
 let output = '';
 
 async function startServer() {
+  if (server && server.exitCode === null) return;
   server = spawn(process.execPath, [path.join(process.cwd(), 'node_modules', 'next', 'dist', 'bin', 'next'),
     'dev', '--hostname', '127.0.0.1', '--port', String(PORT)], {
     cwd: process.cwd(),
@@ -96,4 +97,58 @@ describe.skipIf(!enabled)('real visual workspace browser UX', () => {
       await browser.close();
     }
   }, 100_000);
+
+  it('uploads a PNG, links it to canvas, and produces a deterministic sprite atlas', async () => {
+    await startServer();
+    const { encodePng } = await import('@/lib/assets/png');
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage({ viewport: { width: 1320, height: 900 } });
+      page.setDefaultTimeout(20_000);
+      await page.addInitScript(() => localStorage.setItem('ai-game-settings', JSON.stringify({
+        provider: 'DeepSeek', apiKey: '', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat',
+        githubToken: '',
+      })));
+      const session = await (await page.request.post(origin + '/api/session')).json() as { sessionId: string };
+      await page.goto(origin + '/?session=' + session.sessionId, { waitUntil: 'domcontentloaded', timeout: 50_000 });
+      await page.getByRole('tab', { name: 'Design Canvas' }).click();
+      await page.getByRole('button', { name: 'Asset Library' }).click();
+      await page.getByRole('region', { name: 'Asset library' }).waitFor();
+      const fixture = encodePng({ width: 2, height: 2, pixels: Buffer.from([
+        255, 0, 0, 255, 0, 255, 0, 255,
+        0, 0, 255, 255, 255, 255, 0, 255,
+      ]) });
+      await page.getByLabel('Select asset file').setInputFiles({
+        name: 'sprite.png', mimeType: 'image/png', buffer: fixture,
+      });
+      await page.getByLabel('Asset rights').selectOption('owned');
+      await page.getByRole('button', { name: 'Import asset' }).click();
+      await page.getByText('Asset imported and verified').waitFor();
+      const catalog = await (await page.request.get(origin + '/api/assets/' + session.sessionId)).json();
+      expect(catalog.entries).toHaveLength(1);
+      const entry = catalog.entries[0];
+      expect(entry.path).toMatch(/^assets\/[a-f0-9]{64}\.png$/);
+      const preview = await page.request.get(origin + '/api/assets/' + session.sessionId + '/' + entry.id);
+      expect(preview.status()).toBe(200);
+      expect(Buffer.from(await preview.body()).equals(fixture)).toBe(true);
+      await page.getByRole('button', { name: 'Add to canvas' }).click();
+      expect(await page.locator('[data-node-id]').count()).toBe(1);
+      await page.getByRole('button', { name: 'Save board' }).click();
+      await page.getByText('Saved to design.board.json').waitFor();
+      const board = await (await page.request.get(origin + '/api/design-board/' + session.sessionId)).json();
+      expect(board.board.nodes[0].reference).toBe(entry.path);
+      await page.getByRole('button', { name: 'Asset Library' }).click();
+      await page.getByLabel('Include in atlas sprite.png').check();
+      await page.getByRole('button', { name: /Generate PNG atlas/ }).click();
+      await page.getByText('Sprite atlas generated with 1 frames').waitFor();
+      const updated = await (await page.request.get(origin + '/api/assets/' + session.sessionId)).json();
+      expect(updated.entries).toHaveLength(2);
+      const atlas = updated.entries.find((a: { atlasFrames?: unknown }) => a.atlasFrames);
+      expect(atlas.atlasFrames[0].id).toBe(entry.id);
+      expect(atlas.width).toBe(1024);
+    } finally {
+      await browser.close();
+    }
+  }, 100_000);
+
 });
