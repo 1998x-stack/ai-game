@@ -115,3 +115,6 @@ A Stage is only complete when it has (1) reviewed design and file/API contract,
 (2) implemented code, (3) deterministic unit tests, (4) targeted integration
 tests, (5) CI evidence, (6) migration/fallback documentation, and
 (7) an explicit list of deferred features and risks.
+
+Stage 4.0: Docker-isolated browser evaluation, bounded job queue and
+fail-closed production execution implemented on stage/4.0-isolated-execution.

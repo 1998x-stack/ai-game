@@ -296,3 +296,13 @@ preview media, link it to asset nodes, and generate deterministic PNG
 spritesheets with frame coordinates. Catalog and blobs remain file-native;
 duplicates are reused and unsafe content is rejected. See
 [Stage 3.1 developer guide](docs/stage-3.1-asset-pipeline.md).
+
+## Stage 4.0 — Docker-isolated playtests and cancellable jobs
+
+For production, set AI_GAME_SANDBOX_MODE=required and pin a locally built
+AI_GAME_SANDBOX_IMAGE to an immutable SHA-256. The Stage 2.1 contract runs
+inside a resource-limited, nonroot network-disabled Docker worker; verified
+JSON evidence and cancellable queue receipts are persisted locally.
+See [Stage 4.0 details](docs/stage-4.0-isolated-execution.md) and the
+session-bound /api/sandbox-jobs/<sessionId> API. Host browser fallback is
+**development-only** and never safe for arbitrary untrusted games.
