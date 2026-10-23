@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { buildGame } from '@/lib/build/packager';
-import { runGameQuality } from '@/lib/runtime/quality-runner';
+import { runIsolatedQuality } from '@/lib/sandbox/runner';
 import type { AgentConfig } from '@/lib/agent/types';
 import type { LoopDriver } from './engine';
 
@@ -55,7 +55,7 @@ export function createProductionLoopDriver(root: string, config: AgentConfig): L
       return { success: result.success === true, errors: result.errors, html: result.html };
     },
     async test(html, contract) {
-      const result = await runGameQuality({ workspaceRoot: root, html, contract });
+      const result = await runIsolatedQuality({ workspaceRoot: root, html, contract });
       return {
         report: { status: result.report.status, runId: result.report.runId,
           contractSha256: result.report.contractSha256 },

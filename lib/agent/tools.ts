@@ -15,7 +15,7 @@ import { injectPerfMonitor, extractPerfMetrics } from '@/lib/runtime/perf-monito
 import { generateTextReport } from '@/lib/runtime/report-generator';
 import { getBrowserPool } from '@/lib/runtime/browser-pool';
 import { parseGameTestContract } from '@/lib/runtime/game-contract';
-import { runGameQuality } from '@/lib/runtime/quality-runner';
+import { runIsolatedQuality, sandboxMode } from '@/lib/sandbox/runner';
 import { runDetectionRules, type RuntimeIssue } from '@/lib/runtime/engine';
 import { validateBaseUrl, validateWorkspacePath, redactSecrets } from '@/lib/security/validation';
 import { executeTool } from './tool-kernel';
@@ -880,12 +880,19 @@ async function gameRuntimeHandler(
         throw new Error('game.test.json exceeds 64 KB');
       }
       const contract = parseGameTestContract(JSON.parse(source));
-      const result = await runGameQuality({ workspaceRoot: root, html, contract });
+      const result = await runIsolatedQuality({ workspaceRoot: root, html, contract });
       return result.text;
     } catch (error) {
       return 'GAME TEST CONTRACT ERROR: ' +
         (error instanceof Error ? error.message : String(error)).slice(0, 400);
     }
+  }
+
+  // Stage 4: the legacy heuristic path runs untrusted JS in the host browser
+  // pool. Never silently use it when isolation is required.
+  if (sandboxMode() === 'required') {
+    return 'ISOLATION REQUIRED: legacy heuristic playtests are disabled. ' +
+      'Create and validate game.test.json using the game_design compile action.';
   }
 
   // Analyze game code to determine test approach
