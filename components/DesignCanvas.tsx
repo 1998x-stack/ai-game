@@ -243,7 +243,22 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
                     onBlur={e => commit({type:'update-node',id:selectedNode.id,patch:{description:e.target.value}})} />
                 </label>
                 <p className="break-all text-panel-muted">Stable ID: {selectedNode.id}</p>
-                {selectedNode.reference && <p className="break-all text-panel-muted">Source: {selectedNode.reference}</p>}
+                {selectedNode.kind === 'mechanic' && <label className="flex flex-col gap-1">GDD mechanic
+                  <select aria-label="GDD mechanic reference" value={selectedNode.reference || ''}
+                    onChange={e => commit({type:'set-reference',id:selectedNode.id,reference:e.target.value || null})}
+                    className="rounded bg-panel-bg border border-panel-border px-2 py-1">
+                    <option value="">No reference</option>
+                    {remote?.mechanics.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
+                  </select>
+                </label>}
+                {selectedNode.kind === 'asset' && <label className="flex flex-col gap-1">Workspace asset
+                  <select aria-label="Asset reference" value={selectedNode.reference || ''}
+                    onChange={e => commit({type:'set-reference',id:selectedNode.id,reference:e.target.value || null})}
+                    className="rounded bg-panel-bg border border-panel-border px-2 py-1">
+                    <option value="">No reference</option>
+                    {remote?.assets.map(asset => <option key={asset} value={asset}>{asset}</option>)}
+                  </select>
+                </label>}
                 <label className="flex flex-col gap-1">Connect to
                   <select aria-label="Connection target" value={linkTo} onChange={e => setLinkTo(e.target.value)}
                     className="rounded bg-panel-bg border border-panel-border px-2 py-1">

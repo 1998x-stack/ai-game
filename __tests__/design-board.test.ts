@@ -20,6 +20,12 @@ describe('file-native design board model', () => {
       patch: { x: 550, y: 120 } });
     expect(moved.nodes[0].id).toBe(board.nodes[0].id);
     expect(moved.nodes[0].reference).toBe('movement');
+    const linked = applyBoardEdit(moved, { type: 'set-reference', id: moved.nodes[0].id,
+      reference: 'collision' });
+    expect(linked.nodes[0].reference).toBe('collision');
+    const cleared = applyBoardEdit(linked, { type: 'set-reference', id: linked.nodes[0].id,
+      reference: null });
+    expect(cleared.nodes[0].reference).toBeUndefined();
     expect(board.nodes[0].x).not.toBe(moved.nodes[0].x);
   });
   it('undoes node creation, moving, linking and node removal without losing identities', () => {
@@ -65,6 +71,8 @@ describe('file-native design board model', () => {
       id: 'asset_one', kind: 'asset', title: 'Artwork', description: '', x: 0, y: 0,
       width: 200, height: 100, reference: 'assets/../outside',
     } })).toThrow('asset reference');
+    expect(() => applyBoardEdit(board, { type: 'set-reference',
+      id: board.nodes[0].id, reference: '../../../etc/passwd' })).toThrow('identifier');
     expect(emptyBoard().schemaVersion).toBe(1);
   });
 });

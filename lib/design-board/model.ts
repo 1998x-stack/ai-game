@@ -127,6 +127,7 @@ export type BoardEdit =
   | { type: 'add-node'; node: BoardNode }
   | { type: 'update-node'; id: string; patch: Partial<Pick<BoardNode, 'title' | 'description' | 'x' | 'y' | 'width' | 'height'>> }
   | { type: 'remove-node'; id: string }
+  | { type: 'set-reference'; id: string; reference: string | null }
   | { type: 'add-edge'; edge: BoardEdge }
   | { type: 'remove-edge'; id: string }
   | { type: 'rename-board'; title: string };
@@ -138,6 +139,17 @@ export function applyBoardEdit(board: DesignBoard, edit: BoardEdit): DesignBoard
       next = { ...board, nodes: [...board.nodes, edit.node] }; break;
     case 'update-node':
       next = { ...board, nodes: board.nodes.map(n => n.id === edit.id ? { ...n, ...edit.patch, id: n.id, kind: n.kind, reference: n.reference } : n) }; break;
+    case 'set-reference':
+      next = { ...board, nodes: board.nodes.map(node => {
+        if (node.id !== edit.id) return node;
+        if (edit.reference === null) {
+          const copy = { ...node };
+          delete copy.reference;
+          return copy;
+        }
+        return { ...node, reference: edit.reference };
+      }) };
+      break;
     case 'remove-node':
       next = { ...board, nodes: board.nodes.filter(n => n.id !== edit.id),
         edges: board.edges.filter(e => e.from !== edit.id && e.to !== edit.id) }; break;
