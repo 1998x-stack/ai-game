@@ -277,3 +277,13 @@ Playwright -> evidence-review -> repair process one stage at a time.
 It has bounded model calls/tokens/time, source integrity checks and an
 authenticated human approval gate. No automatic publishing.
 See [Stage 2.3 workflow](docs/stage-2.3-agent-loop.md).
+
+## Stage 3.0: File-native Game Design Canvas
+
+The **Game Preview / Design Canvas** tabs add a workspace-backed visual board.
+Create and connect scene/mechanic/note/asset nodes, drag them on a grid,
+edit attributes, undo/redo, and explicitly save `design.board.json`.
+GDD mechanics are linked by stable reference IDs. Stale saves return 409,
+so Agent or another browser tab's changes cannot be silently overwritten.
+The read-only Code diff view shows changes to scripts/game.js. See
+[Stage 3.0 architecture](docs/stage-3.0-visual-workspace.md).
