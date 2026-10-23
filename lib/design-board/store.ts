@@ -55,7 +55,7 @@ function sourceDiff(root: string): string {
   try {
     const diff = execFileSync('git', ['diff', '--no-ext-diff', '--', 'scripts/game.js'], {
       cwd: root, encoding: 'utf8', timeout: 3_000,
-      maxBuffer: 50_000, windowsHide: true,
+      maxBuffer: 50_000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'],
     });
     return diff.slice(0, 12_000);
   } catch { return ''; }
