@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "2048-starter",
+  "id": "game-2048-starter",
   "title": "2048 Classic",
   "genre": "2048",
   "templateVersion": "1.0.0",
