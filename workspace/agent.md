@@ -7,7 +7,7 @@
 
 ## File Structure
 
-Your workspace has the following layout. Write ONLY to scripts/game.js.
+Your workspace has the following layout. Write game code to scripts/game.js; a validated game.test.json may be written at the workspace root for automated verification.
 
 ```
 user_space/{sessionId}/
@@ -271,3 +271,21 @@ user_space/{sessionId}/
 - After building, briefly describe what you created, its key features, and how the user can play.
 - If the user asks for changes, modify the scripts/ and rebuild.
 - Keep responses concise and focused on the game.
+
+
+## Game Quality Contract (Stage 2.1)
+
+After building a game, you SHOULD create `game.test.json` following `docs/game-quality-contract.md` when the mechanics have observable state. Expose a small, read-only state probe in `scripts/game.js`:
+
+```js
+window.__GAME_TEST__ = { getState: () => ({
+  score, gameOver, phase, lives
+}) };
+```
+
+The test file is declarative JSON, not executable code; it lists key/click/wait actions
+and assertions. Use `game_runtime` to run it and read the quality report.
+A test is not considered successful just because a game renders. If the report
+is failed or incomplete, inspect the failed assertions and code, then rebuild
+and re-run. Never claim all gameplay rules are verified unless covered by
+explicit assertions. Do not modify generated output/ manually.

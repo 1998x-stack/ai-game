@@ -23,3 +23,17 @@ jobs:
       - run: npm run build
         env:
           AI_GAME_SESSION_SECRET: ci-only-secret-not-for-production
+
+  browser-smoke:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
