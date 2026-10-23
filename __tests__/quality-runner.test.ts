@@ -44,6 +44,7 @@ function mockPage(states: Record<string, unknown>[]) {
     route: vi.fn(async () => undefined),
     setViewportSize: vi.fn(async () => undefined),
     setContent: vi.fn(async () => undefined),
+    goto: vi.fn(async () => undefined),
     waitForTimeout: vi.fn(async () => undefined),
     keyboard: { press: vi.fn(async () => undefined) },
     mouse: { click: vi.fn(async () => undefined) },
