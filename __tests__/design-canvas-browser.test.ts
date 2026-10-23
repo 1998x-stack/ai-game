@@ -60,7 +60,12 @@ describe.skipIf(!enabled)('real visual workspace browser UX', () => {
       expect(await page.locator('[data-node-id]').count()).toBe(0);
       await page.getByRole('button', { name: 'Redo' }).click();
       expect(await page.locator('[data-node-id]').count()).toBe(1);
-      await page.getByRole('button', { name: 'Save board' }).click();
+      const [saveResponse] = await Promise.all([
+        page.waitForResponse(response => response.request().method() === 'PUT' &&
+          response.url().includes('/api/design-board/')),
+        page.getByRole('button', { name: 'Save board' }).click(),
+      ]);
+      expect(saveResponse.status(), await saveResponse.text()).toBe(200);
       await page.getByText('Saved to design.board.json').waitFor();
       const stored = await (await page.request.get(origin + '/api/design-board/' + sessionId)).json();
       expect(stored.board.nodes).toHaveLength(1);
