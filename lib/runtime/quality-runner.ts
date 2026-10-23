@@ -143,9 +143,25 @@ export async function runGameQuality(input: RunGameQualityInput): Promise<{
           errors.push(message.text().slice(0, 400));
         }
       });
-      await page.route('**/*', (route) => route.abort('blockedbyclient'));
+      // A plain about:blank setContent page has an opaque origin and cannot
+      // use localStorage. Serve only the in-memory entry document through a
+      // route on a fixed .localhost URL; all other network requests are denied.
+      const entryUrl = 'http://ai-game.localhost/';
+      let entryServed = false;
+      await page.route('**/*', (route) => {
+        const request = route.request();
+        if (!entryServed && request.url() === entryUrl &&
+            request.isNavigationRequest() && request.resourceType() === 'document') {
+          entryServed = true;
+          return route.fulfill({
+            status: 200, contentType: 'text/html; charset=utf-8',
+            body: injectSeed(html, contract.seed),
+          });
+        }
+        return route.abort('blockedbyclient');
+      });
       await page.setViewportSize(contract.viewport);
-      await page.setContent(injectSeed(html, contract.seed), { waitUntil: 'load', timeout: 8_000 });
+      await page.goto(entryUrl, { waitUntil: 'load', timeout: 8_000 });
       await page.waitForTimeout(100);
       const before = await readGameState(page);
       for (const [index, action] of scenario.actions.entries()) {

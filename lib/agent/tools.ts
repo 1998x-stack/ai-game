@@ -1,3 +1,4 @@
+import { executeGameDesignCommand, type GameDesignCommand } from '@/lib/game-design/commands';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
@@ -154,6 +155,21 @@ const delegateSubagentDef: ToolDefinition = {
       instruction: { type: 'string', description: 'Concise research instruction. Be specific about what to find and where. Example: "Read docs/gotchas.md, docs/game-dev-guide.md, and templates/snake/game.js. Summarize: (1) key gotchas to avoid, (2) game loop pattern used in snake, (3) recommended canvas setup approach."' },
     },
     required: ['instruction'],
+    additionalProperties: false,
+  },
+};
+
+const gameDesignDef: ToolDefinition = {
+  name: 'game_design',
+  description: 'Stage 2.2 design planning. List registered game templates, inspect game.design.json and coverage, compile explicit acceptance cases into game.test.json (never overwrite existing tests), or diagnose a known playtest report UUID. Start with action=templates then read docs/game-design-guide.md. No AI API calls.',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['templates', 'inspect', 'compile', 'diagnose'] },
+      genre: { type: 'string', enum: ['snake', 'tetris', 'breakout', '2048'] },
+      reportId: { type: 'string', description: 'UUID from game_runtime report, required for diagnose' },
+    },
+    required: ['action'],
     additionalProperties: false,
   },
 };
@@ -775,6 +791,32 @@ async function executeAction(page: any, action: TestAction): Promise<void> {
   }
 }
 
+async function gameDesignHandler(
+  args: Record<string, unknown>,
+  root: string,
+): Promise<string> {
+  const action = args.action;
+  if (!['templates', 'inspect', 'compile', 'diagnose'].includes(String(action))) {
+    return 'GAME DESIGN ERROR: unknown action';
+  }
+  if (args.genre !== undefined && !['snake','tetris','breakout','2048'].includes(String(args.genre))) {
+    return 'GAME DESIGN ERROR: unknown genre';
+  }
+  if (action === 'diagnose' && typeof args.reportId !== 'string') {
+    return 'GAME DESIGN ERROR: reportId UUID is required for diagnose';
+  }
+  try {
+    return executeGameDesignCommand(root, {
+      action: action as GameDesignCommand['action'],
+      ...(typeof args.genre === 'string' ? { genre: args.genre } : {}),
+      ...(typeof args.reportId === 'string' ? { reportId: args.reportId } : {}),
+    } as GameDesignCommand);
+  } catch (error) {
+    return 'GAME DESIGN ERROR: ' +
+      (error instanceof Error ? error.message : String(error)).slice(0, 400);
+  }
+}
+
 async function gameRuntimeHandler(
   args: Record<string, unknown>,
   root: string,
@@ -998,6 +1040,7 @@ export const toolRegistry: ToolHandler[] = [
   { definition: setErrorDef, handler: setErrorHandler },
   { definition: delegateSubagentDef, handler: delegateSubagentHandler },
   { definition: gameRuntimeDef, handler: gameRuntimeHandler },
+  { definition: gameDesignDef, handler: gameDesignHandler },
   { definition: gitLogDef, handler: gitLogHandler },
   { definition: gitDiffDef, handler: gitDiffHandler },
   { definition: gitStatusDef, handler: gitStatusHandler },

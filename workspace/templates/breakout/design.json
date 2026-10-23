@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "id": "breakout-starter",
+  "title": "breakout Classic",
+  "genre": "breakout",
+  "templateVersion": "1.0.0",
+  "seed": 20261023,
+  "viewport": {
+    "width": 800,
+    "height": 900
+  },
+  "mechanics": [
+    {
+      "id": "paddle",
+      "description": "paddle rules and invariants",
+      "skill": "breakout-mechanics"
+    },
+    {
+      "id": "bricks",
+      "description": "bricks rules and invariants",
+      "skill": "breakout-mechanics"
+    },
+    {
+      "id": "lives",
+      "description": "lives rules and invariants",
+      "skill": "breakout-mechanics"
+    }
+  ],
+  "controls": [
+    {
+      "event": "start",
+      "key": "Space"
+    },
+    {
+      "event": "moveLeft",
+      "key": "ArrowLeft"
+    },
+    {
+      "event": "moveRight",
+      "key": "ArrowRight"
+    }
+  ],
+  "stateMachine": {
+    "initial": "menu",
+    "states": [
+      "menu",
+      "playing",
+      "gameover"
+    ],
+    "transitions": [
+      {
+        "from": "menu",
+        "to": "playing",
+        "on": "start"
+      },
+      {
+        "from": "playing",
+        "to": "gameover",
+        "on": "gameover"
+      }
+    ]
+  },
+  "acceptance": [
+    {
+      "id": "boot",
+      "title": "Canvas initializes without browser errors",
+      "mechanic": "paddle",
+      "mode": "automated",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 250
+        }
+      ],
+      "assertions": [
+        {
+          "type": "canvas-size",
+          "minWidth": 600,
+          "minHeight": 750
+        },
+        {
+          "type": "no-errors"
+        }
+      ]
+    },
+    {
+      "id": "bricksReview",
+      "title": "Review bricks rules",
+      "mechanic": "bricks",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    },
+    {
+      "id": "livesReview",
+      "title": "Review lives rules",
+      "mechanic": "lives",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    }
+  ]
+}

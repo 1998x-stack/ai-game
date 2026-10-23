@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "id": "tetris-starter",
+  "title": "tetris Classic",
+  "genre": "tetris",
+  "templateVersion": "1.0.0",
+  "seed": 20261023,
+  "viewport": {
+    "width": 800,
+    "height": 900
+  },
+  "mechanics": [
+    {
+      "id": "movement",
+      "description": "movement rules and invariants",
+      "skill": "tetris-mechanics"
+    },
+    {
+      "id": "lineClear",
+      "description": "lineClear rules and invariants",
+      "skill": "tetris-mechanics"
+    },
+    {
+      "id": "locking",
+      "description": "locking rules and invariants",
+      "skill": "tetris-mechanics"
+    }
+  ],
+  "controls": [
+    {
+      "event": "start",
+      "key": "Space"
+    },
+    {
+      "event": "rotate",
+      "key": "ArrowUp"
+    },
+    {
+      "event": "moveLeft",
+      "key": "ArrowLeft"
+    }
+  ],
+  "stateMachine": {
+    "initial": "menu",
+    "states": [
+      "menu",
+      "playing",
+      "gameover"
+    ],
+    "transitions": [
+      {
+        "from": "menu",
+        "to": "playing",
+        "on": "start"
+      },
+      {
+        "from": "playing",
+        "to": "gameover",
+        "on": "gameover"
+      }
+    ]
+  },
+  "acceptance": [
+    {
+      "id": "boot",
+      "title": "Canvas initializes without browser errors",
+      "mechanic": "movement",
+      "mode": "automated",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 250
+        }
+      ],
+      "assertions": [
+        {
+          "type": "canvas-size",
+          "minWidth": 460,
+          "minHeight": 600
+        },
+        {
+          "type": "no-errors"
+        }
+      ]
+    },
+    {
+      "id": "lineClearReview",
+      "title": "Review lineClear rules",
+      "mechanic": "lineClear",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    },
+    {
+      "id": "lockingReview",
+      "title": "Review locking rules",
+      "mechanic": "locking",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    }
+  ]
+}

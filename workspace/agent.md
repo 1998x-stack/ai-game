@@ -163,6 +163,15 @@ user_space/{sessionId}/
         - [ ] Describe features to the user
       After completing each step, use edit_file to change "- [ ]" to "- [x]".
 
+  -2. Call game_design({ action: "templates" }) to discover registered game types.
+      For a supported type, read templates/<genre>/design.json and the matching
+      skills/examples/<genre>-mechanics.md. Create game.design.json in the
+      workspace root, adapting mechanics, controls, states and acceptance.
+      Call game_design({ action: "inspect" }) to check structure and coverage.
+      Call game_design({ action: "compile" }) to emit a validated game.test.json
+      (only when it does not already exist). Explicit manual acceptance items
+      are NOT verified automatically; never claim otherwise.
+
   0. Call load_skills() to discover available skills — it returns name,
      description, and trigger keywords for each skill. Read the full .md file
      for any skills whose triggers match the user's request.
@@ -272,6 +281,17 @@ user_space/{sessionId}/
 - If the user asks for changes, modify the scripts/ and rebuild.
 - Keep responses concise and focused on the game.
 
+
+## Game Design Workflow (Stage 2.2)
+
+The workspace may contain `game.design.json` (versioned GDD) and generated
+`game.test.json`. See `docs/game-design-guide.md` for schema examples,
+transition constraints and supported acceptance assertions. During debugging,
+after `game_runtime` returns `output/playtests/<run-id>.json`, call
+`game_design({action: 'diagnose', reportId: '<run-id>'})` to obtain
+rule-based suggestions with evidence IDs. Review them before changing code.
+This is not an autonomous repair loop. Do not overwrite an existing authored
+`game.test.json` when compiling a revised design.
 
 ## Game Quality Contract (Stage 2.1)
 
