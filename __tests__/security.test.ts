@@ -31,4 +31,19 @@ describe('security validation', () => {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(outside, { recursive: true, force: true });
   });
+  it('supports deeply nested new files but rejects symlinked ancestors', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-game-deep-path-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-game-deep-outside-'));
+    try {
+      expect(validateWorkspacePath('levels/first/scene.js', root, true))
+        .toBe(path.join(root, 'levels', 'first', 'scene.js'));
+      fs.symlinkSync(outside, path.join(root, 'linked'));
+      expect(() => validateWorkspacePath('linked/first/scene.js', root)).toThrow();
+      expect(() => validateWorkspacePath('linked/first/scene.js', root, true)).toThrow();
+      expect(() => validateWorkspacePath('../escaped.js', root, true)).toThrow();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });

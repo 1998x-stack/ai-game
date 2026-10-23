@@ -22,6 +22,16 @@ function assertSessionId(sessionId: string): void {
   }
 }
 
+// Capacity bounds the in-memory registry, not the lifetime of saved projects.
+// Explicit deleteWorkspace() is the only operation allowed to remove project files.
+function evictInactiveSessionRegistrations(): void {
+  if (sessions.size < CONFIG.workspace.maxActiveSessions) return;
+  const oldest = [...sessions.values()].sort(
+    (a, b) => a.lastActiveAt.getTime() - b.lastActiveAt.getTime(),
+  )[0];
+  if (oldest) sessions.delete(oldest.sessionId);
+}
+
 function registerSession(sessionId: string, workspacePath: string): WorkspaceSession {
   const now = new Date();
   const session: WorkspaceSession = { sessionId, workspacePath, createdAt: now, lastActiveAt: now };
@@ -31,14 +41,7 @@ function registerSession(sessionId: string, workspacePath: string): WorkspaceSes
 
 export async function createWorkspace(sessionId: string): Promise<WorkspaceSession> {
   assertSessionId(sessionId);
-  if (sessions.size >= CONFIG.workspace.maxActiveSessions) {
-    const oldest = [...sessions.entries()].sort(
-      (a, b) => a[1].lastActiveAt.getTime() - b[1].lastActiveAt.getTime(),
-    )[0];
-    if (oldest) {
-      await deleteWorkspace(oldest[0]).catch(() => {});
-    }
-  }
+  evictInactiveSessionRegistrations();
 
   const workspacePath = path.join(BASE_WORKSPACE_PATH, sessionId);
 
@@ -46,32 +49,30 @@ export async function createWorkspace(sessionId: string): Promise<WorkspaceSessi
   await mkdir(path.join(workspacePath, 'assets'), { recursive: true });
   await mkdir(path.join(workspacePath, 'output'), { recursive: true });
 
-  await copyScaffoldToWorkspace(workspacePath);
-  initGitRepo(workspacePath);
+  // Do not overwrite a previously saved project after process restart.
+  const scaffoldExists = await access(path.join(workspacePath, 'agent.md'))
+    .then(() => true).catch(() => false);
+  if (!scaffoldExists) await copyScaffoldToWorkspace(workspacePath);
+
+  const gitExists = await access(path.join(workspacePath, '.git'))
+    .then(() => true).catch(() => false);
+  if (!gitExists) initGitRepo(workspacePath);
 
   return registerSession(sessionId, workspacePath);
 }
 
 export async function restoreWorkspace(sessionId: string): Promise<WorkspaceSession> {
   assertSessionId(sessionId);
-  if (sessions.size >= CONFIG.workspace.maxActiveSessions) {
-    const oldest = [...sessions.entries()].sort(
-      (a, b) => a[1].lastActiveAt.getTime() - b[1].lastActiveAt.getTime(),
-    )[0];
-    if (oldest) {
-      await deleteWorkspace(oldest[0]).catch(() => {});
-    }
-  }
+  evictInactiveSessionRegistrations();
 
   const workspacePath = path.join(BASE_WORKSPACE_PATH, sessionId);
 
-  const gameJsExists = await access(path.join(workspacePath, 'scripts', 'game.js'))
+  // A project in progress may not have game.js yet. Its scaffold and docs
+  // must still be preserved when the server is restarted.
+  const scaffoldExists = await access(path.join(workspacePath, 'agent.md'))
     .then(() => true)
     .catch(() => false);
-
-  if (!gameJsExists) {
-    return createWorkspace(sessionId);
-  }
+  if (!scaffoldExists) return createWorkspace(sessionId);
 
   // Workspace already exists — ensure dirs + register, skip scaffold copy
   await mkdir(path.join(workspacePath, 'scripts'), { recursive: true });
@@ -126,7 +127,7 @@ export async function cleanupStaleWorkspaces(maxAgeMs: number = CONFIG.workspace
     if (s.lastActiveAt.getTime() < cutoff) stale.push(id);
   }
 
-  await Promise.allSettled(stale.map((id) => deleteWorkspace(id)));
+  for (const id of stale) sessions.delete(id);
   return stale.length;
 }
 

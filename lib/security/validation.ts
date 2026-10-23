@@ -45,27 +45,37 @@ export function isSensitiveWorkspacePath(userPath: string): boolean {
 }
 
 export function validateWorkspacePath(userPath: string, workspaceRoot: string, forWrite = false): string {
-  if (!userPath || userPath.includes('..') || isSensitiveWorkspacePath(userPath)) {
+  if (!userPath || userPath.includes('\0') || path.isAbsolute(userPath) ||
+      userPath.includes('..') || isSensitiveWorkspacePath(userPath)) {
     throw new Error('Path is not allowed inside the workspace');
   }
-  const root = path.resolve(workspaceRoot);
+
+  // Resolve the nearest existing ancestor so deeply nested new files work.
+  // Checking only the immediate parent incorrectly rejected safe new paths.
+  const root = fs.realpathSync(path.resolve(workspaceRoot));
   const resolved = path.resolve(root, userPath);
   if (resolved !== root && !resolved.startsWith(root + path.sep)) {
     throw new Error('Path is outside the workspace root');
   }
-
-  const existingTarget = fs.existsSync(resolved) ? resolved : path.dirname(resolved);
-  let realTarget: string;
-  try {
-    realTarget = fs.realpathSync(existingTarget);
-  } catch {
-    throw new Error('Workspace path cannot be resolved safely');
+  let ancestor = resolved;
+  // The canonical root is known to exist. Never walk above it, even when
+  // a test double (or a transient filesystem probe) reports a missing path.
+  while (ancestor !== root && !fs.existsSync(ancestor)) {
+    ancestor = path.dirname(ancestor);
   }
-  if (realTarget !== root && !realTarget.startsWith(root + path.sep)) {
+  const realAncestor = fs.realpathSync(ancestor);
+  if (realAncestor !== root && !realAncestor.startsWith(root + path.sep)) {
     throw new Error('Path resolves outside the workspace root');
   }
-  if (forWrite && fs.existsSync(resolved) && fs.lstatSync(resolved).isSymbolicLink()) {
-    throw new Error('Writing through symbolic links is not allowed');
+
+  if (forWrite) {
+    let current = root;
+    for (const segment of path.relative(root, resolved).split(path.sep).filter(Boolean)) {
+      current = path.join(current, segment);
+      if (fs.existsSync(current) && fs.lstatSync(current).isSymbolicLink()) {
+        throw new Error('Writing through symbolic links is not allowed');
+      }
+    }
   }
   return resolved;
 }

@@ -27,5 +27,7 @@ export function hasSessionCapability(sessionId: string): boolean {
   const value = cookies().get(capabilityCookieName(sessionId))?.value;
   if (!value) return false;
   const expected = signature(sessionId);
-  return crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected));
+  const supplied = Buffer.from(value);
+  const trusted = Buffer.from(expected);
+  return supplied.length === trusted.length && crypto.timingSafeEqual(supplied, trusted);
 }
