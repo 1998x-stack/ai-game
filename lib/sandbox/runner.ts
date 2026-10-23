@@ -17,7 +17,9 @@ export function sandboxMode(): SandboxMode {
   if (configured === 'development-only' && process.env.NODE_ENV === 'production') {
     throw new Error('Unisolated browser testing is forbidden in production');
   }
-  return configured ?? (process.env.NODE_ENV === 'production' ? 'required' : 'development-only');
+  return configured === 'required' ? 'required' :
+    configured === 'development-only' ? 'development-only' :
+      (process.env.NODE_ENV === 'production' ? 'required' : 'development-only');
 }
 
 const IMAGE = /^(?:sha256:[0-9a-f]{64}|[a-z0-9][a-z0-9./_:-]*@sha256:[0-9a-f]{64})$/;
@@ -67,7 +69,7 @@ function runDocker(args: string[], name: string, signal?: AbortSignal): Promise<
   return new Promise((resolve, reject) => {
     let stdout = '', stderr = '', settled = false, timedOut = false;
     const child = spawn('docker', args, { shell: false, stdio: ['ignore','pipe','pipe'],
-      env: { PATH: process.env.PATH || '/usr/bin:/bin', HOME: process.env.HOME || '/tmp' } });
+      env: process.env });
     const cleanup = () => {
       signal?.removeEventListener('abort', abort);
       clearTimeout(timeout);
