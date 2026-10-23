@@ -49,4 +49,30 @@ describe.skipIf(!enabled)('real Chromium game contract smoke', () => {
     expect(fs.existsSync(path.join(root, a.reportPath))).toBe(true);
     expect(fs.existsSync(path.join(root, b.reportPath))).toBe(true);
   });
+  it('builds registered Snake template and verifies compiled GDD acceptance in Chromium', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gdd-snake-smoke-'));
+    dirs.push(root);
+    const { parseGameDesignDocument } = await import('@/lib/game-design/gdd');
+    const { compileGameDesign } = await import('@/lib/game-design/compiler');
+    const { buildGame } = await import('@/lib/build/packager');
+    const scaffold = path.join(process.cwd(), 'workspace');
+    for (const dir of ['scripts', 'assets', 'output']) {
+      fs.mkdirSync(path.join(root, dir), { recursive: true });
+    }
+    fs.copyFileSync(path.join(scaffold, 'lib', 'utils.js'),
+      path.join(root, 'scripts', 'utils.js'));
+    fs.copyFileSync(path.join(scaffold, 'templates', 'snake', 'game.js'),
+      path.join(root, 'scripts', 'game.js'));
+    const gdd = parseGameDesignDocument(JSON.parse(fs.readFileSync(
+      path.join(scaffold, 'templates', 'snake', 'design.json'), 'utf8')));
+    const contract = compileGameDesign(gdd).contract;
+    expect(contract).not.toBeNull();
+    const built = buildGame(root);
+    expect(built.success).toBe(true);
+    const result = await runGameQuality({ workspaceRoot: root, html: built.html, contract: contract! });
+    expect(result.report.scenarios).toHaveLength(2);
+    expect(result.report.status).toBe('passed');
+    expect(result.report.scenarios.map(s => s.id)).toEqual(['boot', 'begin']);
+  });
+
 });

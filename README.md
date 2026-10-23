@@ -255,3 +255,17 @@ and [example contract](workspace/templates/snake/game.test.json).
 The test state probe uses `window.__GAME_TEST__.getState()` and should expose
 small, non-sensitive scalar values only. Seeded `Math.random` is not full
 time-deterministic replay; this feature is not a security sandbox.
+
+## Stage 2.2 — Versioned GDD and Domain Game Skills (review branch)
+
+Create project-local `game.design.json` from the four starter designs in `workspace/templates/<genre>/design.json`,
+then use the Agent `game_design` tool:
+
+- `action=templates`: view pinned genre templates and skill paths.
+- `action=inspect`: validate GDD, state reachability and acceptance coverage.
+- `action=compile`: produce bounded `game.test.json` without overwriting existing tests.
+- `action=diagnose`, `reportId=<UUID>`: explain failed playtests linked to GDD requirements.
+
+The four genre skills are copied into each workspace. The template game code exposes
+a small read-only scalar state hook for tests. Manual requirements are never
+counted as automated test passes. See [Stage 2.2 guide](docs/stage-2.2-game-design.md).

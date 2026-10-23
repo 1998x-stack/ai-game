@@ -1,0 +1,444 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/1998x-stack/ai-game/blob/stage/2.2-game-design-skills/workspace/docs/game-design.schema.json",
+  "title": "AI Game Studio GDD v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "genre",
+    "templateVersion",
+    "seed",
+    "viewport",
+    "mechanics",
+    "controls",
+    "stateMachine",
+    "acceptance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^\\u0000-\\u001f]+$"
+    },
+    "genre": {
+      "enum": [
+        "snake",
+        "tetris",
+        "breakout",
+        "2048"
+      ]
+    },
+    "templateVersion": {
+      "const": "1.0.0"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 320,
+          "maximum": 1920
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 240,
+          "maximum": 1080
+        }
+      }
+    },
+    "mechanics": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "description",
+          "skill"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "skill": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+          }
+        }
+      }
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "key"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^(Arrow(Up|Down|Left|Right)|Space|Enter|Escape|Tab|[a-zA-Z0-9])$"
+          }
+        }
+      }
+    },
+    "stateMachine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initial",
+        "states",
+        "transitions"
+      ],
+      "properties": {
+        "initial": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "uniqueItems": true
+        },
+        "transitions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to",
+              "on"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "on": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/acceptance"
+      }
+    }
+  },
+  "$defs": {
+    "action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "key"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "key"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^(Arrow(Up|Down|Left|Right)|Space|Enter|Escape|Tab|[a-zA-Z0-9])$"
+            },
+            "holdMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "click"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4096
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "ms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "wait"
+            },
+            "ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3000
+            }
+          }
+        }
+      ]
+    },
+    "assertion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "minWidth",
+            "minHeight"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "canvas-size"
+            },
+            "minWidth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            },
+            "minHeight": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "key",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "state-equals"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "value": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "key"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "state-changed"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "expected"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "game-over"
+            },
+            "expected": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "no-errors"
+            }
+          }
+        }
+      ]
+    },
+    "acceptance": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "title",
+            "mechanic",
+            "mode",
+            "actions",
+            "assertions"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[^\\u0000-\\u001f]+$"
+            },
+            "mechanic": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "mode": {
+              "const": "automated"
+            },
+            "actions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 40,
+              "items": {
+                "$ref": "#/$defs/action"
+              }
+            },
+            "assertions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/assertion"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "title",
+            "mechanic",
+            "mode",
+            "rationale"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[^\\u0000-\\u001f]+$"
+            },
+            "mechanic": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "mode": {
+              "const": "manual"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          }
+        }
+      ]
+    }
+  }
+}
