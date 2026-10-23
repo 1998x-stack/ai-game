@@ -85,7 +85,8 @@ describe('session-scoped Docker job API', () => {
       schemaVersion: 1, id: jobId, status: 'cancelled', isolated: false,
       createdAt: '', updatedAt: '', gameSha256: 'x', contractSha256: 'y',
     });
-    expect((await GET(request('GET', '?id=' + jobId), ctx)).status).toBe(200);
+    const found = await GET(request('GET', '?id=' + jobId), ctx);
+    expect(found.status, await found.text()).toBe(200);
     expect((await DELETE(request('DELETE', '?id=' + jobId, 'http://localhost:3000'), ctx)).status).toBe(200);
     expect((await GET(request('GET', '?id=../../etc/passwd'), ctx)).status).toBe(400);
   });
