@@ -1,0 +1,8 @@
+node_modules
+.next
+user_space
+.git
+.gitignore
+.env*
+output
+*.log

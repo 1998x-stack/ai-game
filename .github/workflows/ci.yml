@@ -37,3 +37,24 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+
+  sandbox-isolation:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build isolated Playwright worker image
+        run: docker build --file sandbox/Dockerfile --tag ai-game-sandbox:ci .
+      - name: Resolve immutable local image SHA
+        run: echo "AI_GAME_SANDBOX_IMAGE=$(docker image inspect --format='{{.Id}}' ai-game-sandbox:ci)" >> "$GITHUB_ENV"
+      - name: Verify real Docker isolation
+        run: npx vitest run __tests__/sandbox-docker.test.ts
+        env:
+          RUN_REAL_DOCKER: '1'
+          AI_GAME_SANDBOX_MODE: required

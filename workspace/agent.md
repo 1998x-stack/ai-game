@@ -338,3 +338,11 @@ the supported import tool. Never trust MIME labels alone; do not modify
 catalog entries without validating referenced file digests. Atlas images
 have `atlasFrames` mapping source sprite digests to texture coordinates.
 Do not imply the user-supplied asset rights label constitutes legal proof.
+
+## Stage 4.0 isolation
+
+Read docs/isolated-worker-guide.md. A machine-verifiable game.test.json is
+required when production isolation is enabled. Never call the legacy
+heuristic browser path or imply it is sandboxed. Report missing worker
+configuration as a blocked test, not a gameplay success. No model-accessible
+container build, Docker socket, Docker CLI or approval command exists.
