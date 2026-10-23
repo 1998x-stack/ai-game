@@ -58,10 +58,10 @@ export function validateWorkspacePath(userPath: string, workspaceRoot: string, f
     throw new Error('Path is outside the workspace root');
   }
   let ancestor = resolved;
-  while (!fs.existsSync(ancestor)) {
-    const parent = path.dirname(ancestor);
-    if (parent === ancestor) throw new Error('Workspace path cannot be resolved safely');
-    ancestor = parent;
+  // The canonical root is known to exist. Never walk above it, even when
+  // a test double (or a transient filesystem probe) reports a missing path.
+  while (ancestor !== root && !fs.existsSync(ancestor)) {
+    ancestor = path.dirname(ancestor);
   }
   const realAncestor = fs.realpathSync(ancestor);
   if (realAncestor !== root && !realAncestor.startsWith(root + path.sep)) {
