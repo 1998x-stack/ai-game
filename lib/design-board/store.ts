@@ -13,7 +13,17 @@ export class BoardConflictError extends Error {
   constructor() { super('Board has changed since it was loaded; reload and reconcile before saving'); }
 }
 function boardFile(root: string) {
-  return validateWorkspacePath(FILENAME, root, true);
+  const location = validateWorkspacePath(FILENAME, root, true);
+  // existsSync returns false for dangling symlinks. lstat detects the
+  // link itself so atomic rename does not silently replace it.
+  try {
+    if (fs.lstatSync(location).isSymbolicLink()) {
+      throw new Error('Board symlinks are not allowed');
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return location;
 }
 function readRaw(root: string): string | null {
   const filename = boardFile(root);
