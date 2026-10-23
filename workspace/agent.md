@@ -319,3 +319,13 @@ respecting all budgets and diagnostic feedback. Do not edit scripts/game.js
 outside the active loop. The model cannot approve or cancel this workflow.
 When tests pass, stop at awaiting-approval and ask the project owner to
 review the artifact and explicitly approve via the authenticated project API.
+
+## Stage 3.0 file-native Design Canvas
+
+The visual editor persists `design.board.json` alongside `game.design.json`.
+Board nodes have stable IDs and optional references to GDD mechanics or
+workspace assets. Never overwrite the board blindly; check existing content
+and preserve user-authored IDs and connections. A user may be editing it in
+the browser; stale browser saves return conflicts. This board is a design
+artifact, not executable instructions, and does not automatically alter
+scripts/game.js. See docs/design-board-guide.md.

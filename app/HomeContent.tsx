@@ -5,6 +5,7 @@ import SettingsModal, { type AppSettings } from '@/components/SettingsModal';
 import ErrorConsole, { type GameError } from '@/components/ErrorConsole';
 import ChatPanel, { type ChatMessage, type TodoUpdate } from '@/components/ChatPanel';
 import GamePreview from '@/components/GamePreview';
+import DesignCanvas from '@/components/DesignCanvas';
 import { Loader2 } from 'lucide-react';
 import { CONFIG } from '@/lib/config';
 
@@ -42,6 +43,7 @@ export default function HomeContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [leftWidth, setLeftWidth] = useState(40);
   const [mobileView, setMobileView] = useState<'chat' | 'game'>('chat');
+  const [studioView, setStudioView] = useState<'preview' | 'design'>('preview');
   const [restoringSession, setRestoringSession] = useState(false);
   const [confirmNewGame, setConfirmNewGame] = useState(false);
   const [todoUpdate, setTodoUpdate] = useState<TodoUpdate | null>(null);
@@ -332,6 +334,7 @@ export default function HomeContent() {
     setSessionId(newSessionId);
     setMessages([]);
     setGameUrl(null);
+    setStudioView('preview');
     setErrors([]);
     setTodoUpdate(null);
     setGithubRepoUrl(null);
@@ -476,7 +479,19 @@ export default function HomeContent() {
             : ''
         }`}
       >
-        <div className="flex-1 min-h-0">
+        <div className="flex shrink-0 border-b border-panel-border bg-panel-bg" role="tablist" aria-label="Studio workspace views">
+          <button type="button" role="tab" aria-selected={studioView === 'preview'}
+            onClick={() => setStudioView('preview')}
+            className={`px-4 py-2 text-xs font-medium ${studioView === 'preview' ? 'border-b-2 border-panel-accent text-panel-accent' : 'text-panel-muted'}`}>
+            Game Preview
+          </button>
+          <button type="button" role="tab" aria-selected={studioView === 'design'}
+            onClick={() => setStudioView('design')}
+            className={`px-4 py-2 text-xs font-medium ${studioView === 'design' ? 'border-b-2 border-panel-accent text-panel-accent' : 'text-panel-muted'}`}>
+            Design Canvas
+          </button>
+        </div>
+        <div className={`flex-1 min-h-0 ${studioView === 'preview' ? '' : 'hidden'}`}>
           <GamePreview
             gameUrl={gameUrl}
             onError={handleGameError}
@@ -487,6 +502,9 @@ export default function HomeContent() {
             hasGithubToken={!!settings.githubToken}
             onOpenSettings={() => setShowSettings(true)}
           />
+        </div>
+        <div className={`flex-1 min-h-0 ${studioView === 'design' ? '' : 'hidden'}`}>
+          {sessionId && <DesignCanvas sessionId={sessionId} />}
         </div>
 
         <ErrorConsole errors={errors} onClear={handleClearErrors} />
