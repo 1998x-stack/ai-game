@@ -65,6 +65,15 @@ describe('authenticated asset import and content-addressed serving', () => {
     expect((await GET(new Request(host + '/api/assets/' + id),
       { params: { sessionId: '../../../etc' } })).status).toBe(400);
   });
+  it('limits chunked JSON bodies even when Content-Length is absent', async () => {
+    setup();
+    const attack = new Request(host + '/api/assets/' + id, {
+      method: 'POST',
+      headers: { origin: host, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'atlas', junk: 'a'.repeat(2_400_000) }),
+    });
+    expect((await POST(attack, ctx)).status).toBe(413);
+  });
   it('rejects executable SVG and size overflow', async () => {
     setup();
     expect((await POST(uploadRequest(Buffer.from('<svg onload="alert(1)"></svg>'),
