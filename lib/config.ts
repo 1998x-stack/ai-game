@@ -41,6 +41,7 @@ export const CONFIG = {
         'github_push',
         'game_runtime',
         'game_design',
+        'game_loop',
       ],
       subagent: ['read_file', 'write_file', 'grep_file', 'list_directory'],
     } as Record<string, readonly string[]>,

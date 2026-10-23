@@ -309,3 +309,13 @@ A test is not considered successful just because a game renders. If the report
 is failed or incomplete, inspect the failed assertions and code, then rebuild
 and re-run. Never claim all gameplay rules are verified unless covered by
 explicit assertions. Do not modify generated output/ manually.
+
+## Stage 2.3: Bounded autonomous game repair
+
+For explicitly requested autonomous development, first prepare and inspect
+game.design.json. Read docs/agent-repair-loop.md, then call game_loop with
+action=start and a concrete goal. Call action=advance one stage at a time,
+respecting all budgets and diagnostic feedback. Do not edit scripts/game.js
+outside the active loop. The model cannot approve or cancel this workflow.
+When tests pass, stop at awaiting-approval and ask the project owner to
+review the artifact and explicitly approve via the authenticated project API.

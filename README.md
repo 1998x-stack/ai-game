@@ -269,3 +269,11 @@ then use the Agent `game_design` tool:
 The four genre skills are copied into each workspace. The template game code exposes
 a small read-only scalar state hook for tests. Manual requirements are never
 counted as automated test passes. See [Stage 2.2 guide](docs/stage-2.2-game-design.md).
+
+## Stage 2.3: Durable Agent Repair (development branch)
+
+The opt-in game_loop tool runs a persisted GDD -> scoped-code -> build ->
+Playwright -> evidence-review -> repair process one stage at a time.
+It has bounded model calls/tokens/time, source integrity checks and an
+authenticated human approval gate. No automatic publishing.
+See [Stage 2.3 workflow](docs/stage-2.3-agent-loop.md).
