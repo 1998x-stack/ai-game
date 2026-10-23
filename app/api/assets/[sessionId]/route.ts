@@ -4,6 +4,25 @@ import { generateAtlas, importAsset, listAssets, type AssetLicense } from '@/lib
 
 export const runtime = 'nodejs';
 type Ctx = { params: { sessionId: string } };
+const MAX_REQUEST_BYTES = 2_300_000;
+/** Bound chunked/missing-Content-Length HTTP bodies before multipart parsing. */
+async function readBoundedRequest(request: Request): Promise<Buffer> {
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error('Missing request body');
+  let total = 0;
+  const chunks: Buffer[] = [];
+  while (true) {
+    const part = await reader.read();
+    if (part.done) break;
+    total += part.value.byteLength;
+    if (total > MAX_REQUEST_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw new Error('Asset request exceeds 2.3 MB');
+    }
+    chunks.push(Buffer.from(part.value));
+  }
+  return Buffer.concat(chunks, total);
+}
 
 export async function GET(request: Request, { params }: Ctx) {
   const rejected = assetRequestGuard(request, params.sessionId, false);
@@ -28,8 +47,9 @@ export async function POST(request: Request, { params }: Ctx) {
     const root = await assetWorkspace(params.sessionId);
     if (!root) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     const kind = request.headers.get('content-type') || '';
+    const bytes = await readBoundedRequest(request);
     if (kind.startsWith('application/json')) {
-      const data: unknown = await request.json();
+      const data: unknown = JSON.parse(bytes.toString('utf8'));
       if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid atlas request');
       const body = data as { action?: unknown; ids?: unknown };
       if (body.action !== 'atlas' || !Array.isArray(body.ids) ||
@@ -40,7 +60,9 @@ export async function POST(request: Request, { params }: Ctx) {
       return NextResponse.json(result, { status: result.duplicate ? 200 : 201 });
     }
     if (!kind.startsWith('multipart/form-data')) throw new Error('Expected multipart form upload');
-    const form = await request.formData();
+    const form = await new Request('http://asset-upload.localhost/', {
+      method: 'POST', headers: { 'Content-Type': kind }, body: new Uint8Array(bytes),
+    }).formData();
     const entry = form.get('file');
     if (!(entry instanceof File)) throw new Error('Missing asset file');
     if (entry.size < 12 || entry.size > 2 * 1024 * 1024) {
