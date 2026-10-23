@@ -155,7 +155,7 @@ export default function AssetLibrary({ sessionId, onAttach, onCatalogChanged }: 
                   <input type="checkbox" aria-label={'Include in atlas ' + asset.filename}
                     checked={chosen.includes(asset.id)}
                     onChange={e => setChosen(old => e.target.checked ?
-                      [...old.filter(v => v !== asset.id), asset.id].slice(0, 16) : old.filter(v => v !== asset.id)} />
+                      [...old.filter(v => v !== asset.id), asset.id].slice(0, 16) : old.filter(v => v !== asset.id))} />
                   {chosen.includes(asset.id) ? <CheckCircle2 size={12} /> : null} Sprite
                 </label>}
               </div>
