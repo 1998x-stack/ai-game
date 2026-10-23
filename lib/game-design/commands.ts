@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { parseGameDesignDocument, inspectGameStateMachine } from './gdd';
@@ -98,11 +99,18 @@ export function executeGameDesignCommand(
     }
     case 'diagnose': {
       const doc = loadWorkspaceGdd(root);
-      const { coverage } = compileGameDesign(doc);
+      const { contract, coverage } = compileGameDesign(doc);
       const report = readQualityEvidence(root, command.reportId);
+      const expected = contract
+        ? crypto.createHash('sha256').update(JSON.stringify(contract)).digest('hex')
+        : null;
+      // Prevent stale or user-edited scenarios from inheriting an unrelated
+      // GDD requirement ID. Still offer independent generic diagnostics.
+      const linked = expected !== null && expected === report.contractSha256;
       return JSON.stringify({
-        runId: report.runId, status: report.status,
-        coverage, diagnostics: diagnoseGameQuality(report, coverage),
+        runId: report.runId, status: report.status, linkedToCurrentDesign: linked,
+        ...(linked ? {} : { warning: 'Report test contract differs from current GDD; rerun or review the original contract before attributing a requirement.' }),
+        coverage, diagnostics: diagnoseGameQuality(report, linked ? coverage : undefined),
       }, null, 2);
     }
   }
