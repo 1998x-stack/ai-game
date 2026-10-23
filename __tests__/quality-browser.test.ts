@@ -71,7 +71,7 @@ describe.skipIf(!enabled)('real Chromium game contract smoke', () => {
     expect(built.success).toBe(true);
     const result = await runGameQuality({ workspaceRoot: root, html: built.html, contract: contract! });
     expect(result.report.scenarios).toHaveLength(2);
-    expect(result.report.status).toBe('passed');
+    expect(result.report.status, JSON.stringify(result.report.scenarios, null, 2)).toBe('passed');
     expect(result.report.scenarios.map(s => s.id)).toEqual(['boot', 'begin']);
   });
 
