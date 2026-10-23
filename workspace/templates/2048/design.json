@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "2048-starter",
+  "title": "2048 Classic",
+  "genre": "2048",
+  "templateVersion": "1.0.0",
+  "seed": 20261023,
+  "viewport": {
+    "width": 800,
+    "height": 900
+  },
+  "mechanics": [
+    {
+      "id": "movement",
+      "description": "movement rules and invariants",
+      "skill": "2048-mechanics"
+    },
+    {
+      "id": "merge",
+      "description": "merge rules and invariants",
+      "skill": "2048-mechanics"
+    },
+    {
+      "id": "terminal",
+      "description": "terminal rules and invariants",
+      "skill": "2048-mechanics"
+    }
+  ],
+  "controls": [
+    {
+      "event": "up",
+      "key": "ArrowUp"
+    },
+    {
+      "event": "right",
+      "key": "ArrowRight"
+    },
+    {
+      "event": "down",
+      "key": "ArrowDown"
+    },
+    {
+      "event": "left",
+      "key": "ArrowLeft"
+    }
+  ],
+  "stateMachine": {
+    "initial": "playing",
+    "states": [
+      "playing",
+      "won",
+      "gameover"
+    ],
+    "transitions": [
+      {
+        "from": "playing",
+        "to": "won",
+        "on": "goal"
+      },
+      {
+        "from": "playing",
+        "to": "gameover",
+        "on": "gameover"
+      }
+    ]
+  },
+  "acceptance": [
+    {
+      "id": "boot",
+      "title": "Canvas initializes without browser errors",
+      "mechanic": "movement",
+      "mode": "automated",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 250
+        }
+      ],
+      "assertions": [
+        {
+          "type": "canvas-size",
+          "minWidth": 380,
+          "minHeight": 440
+        },
+        {
+          "type": "no-errors"
+        }
+      ]
+    },
+    {
+      "id": "mergeReview",
+      "title": "Review merge rules",
+      "mechanic": "merge",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    },
+    {
+      "id": "terminalReview",
+      "title": "Review terminal rules",
+      "mechanic": "terminal",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    }
+  ]
+}
