@@ -302,3 +302,12 @@ export default class SnakeGame {
 // Auto-start when loaded in the build pipeline
 const game = new SnakeGame();
 game.start();
+
+// Read-only scalar testing bridge (Stage 2.2). Never expose secrets or objects.
+window.__GAME_TEST__ = {
+    getState: () => ({
+        phase: game.state,
+        score: game.score,
+        gameOver: game.state === 'gameover'
+    })
+};

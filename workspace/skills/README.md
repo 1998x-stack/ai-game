@@ -26,3 +26,11 @@ Use the `skill-creator.md` template as a guide. A good skill has:
 | `README.md` | This file — skill system overview |
 | `skill-creator.md` | Template and guide for creating new skills |
 | `examples/` | Example skills for reference |
+
+## Stage 2.2 — Versioned Game Skills
+
+Four domain skills ship with the template registry: `snake-mechanics`,
+`tetris-mechanics`, `breakout-mechanics` and `2048-mechanics`. Each skill
+provides game-specific invariants, debug hypotheses and GDD acceptance advice.
+Game skill content is instructional, not executable code. Review model-authored
+changes; do not treat smoke tests as proof of every game mechanic.

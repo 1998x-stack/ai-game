@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "id": "snake-starter",
+  "title": "snake Classic",
+  "genre": "snake",
+  "templateVersion": "1.0.0",
+  "seed": 20261023,
+  "viewport": {
+    "width": 800,
+    "height": 900
+  },
+  "mechanics": [
+    {
+      "id": "movement",
+      "description": "movement rules and invariants",
+      "skill": "snake-mechanics"
+    },
+    {
+      "id": "scoring",
+      "description": "scoring rules and invariants",
+      "skill": "snake-mechanics"
+    },
+    {
+      "id": "collision",
+      "description": "collision rules and invariants",
+      "skill": "snake-mechanics"
+    }
+  ],
+  "controls": [
+    {
+      "event": "start",
+      "key": "Space"
+    },
+    {
+      "event": "turnUp",
+      "key": "ArrowUp"
+    },
+    {
+      "event": "restart",
+      "key": "Enter"
+    }
+  ],
+  "stateMachine": {
+    "initial": "menu",
+    "states": [
+      "menu",
+      "playing",
+      "gameover"
+    ],
+    "transitions": [
+      {
+        "from": "menu",
+        "to": "playing",
+        "on": "start"
+      },
+      {
+        "from": "playing",
+        "to": "gameover",
+        "on": "collision"
+      },
+      {
+        "from": "gameover",
+        "to": "playing",
+        "on": "restart"
+      }
+    ]
+  },
+  "acceptance": [
+    {
+      "id": "boot",
+      "title": "Canvas initializes without browser errors",
+      "mechanic": "movement",
+      "mode": "automated",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 250
+        }
+      ],
+      "assertions": [
+        {
+          "type": "canvas-size",
+          "minWidth": 400,
+          "minHeight": 400
+        },
+        {
+          "type": "no-errors"
+        }
+      ]
+    },
+    {
+      "id": "begin",
+      "title": "Space starts Snake",
+      "mechanic": "movement",
+      "mode": "automated",
+      "actions": [
+        {
+          "type": "key",
+          "key": "Space"
+        },
+        {
+          "type": "wait",
+          "ms": 250
+        }
+      ],
+      "assertions": [
+        {
+          "type": "state-equals",
+          "key": "phase",
+          "value": "playing"
+        },
+        {
+          "type": "no-errors"
+        }
+      ]
+    },
+    {
+      "id": "scoringReview",
+      "title": "Review scoring rules",
+      "mechanic": "scoring",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    },
+    {
+      "id": "collisionReview",
+      "title": "Review collision rules",
+      "mechanic": "collision",
+      "mode": "manual",
+      "rationale": "Requires a controlled mechanics-specific setup and proof beyond a canvas smoke test."
+    }
+  ]
+}
