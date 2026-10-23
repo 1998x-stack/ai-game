@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, FileCode2, GitBranch, Plus, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { editBoard, newBoardHistory, redoBoard, undoBoard, type BoardHistory } from '@/lib/design-board/history';
 import { type BoardNode, type BoardNodeKind } from '@/lib/design-board/model';
+import AssetLibrary, { type AssetItem } from '@/components/AssetLibrary';
 
 interface WorkspaceBoardResponse {
   board: BoardHistory['present'];
@@ -28,7 +29,7 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
-  const [view, setView] = useState<'board' | 'diff'>('board');
+  const [view, setView] = useState<'board' | 'diff' | 'assets'>('board');
   const [dragging, setDragging] = useState<{ id: string; x: number; y: number } | null>(null);
   const drag = useRef<DragState | null>(null);
   const canvas = useRef<HTMLDivElement | null>(null);
@@ -145,6 +146,24 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
     { ...node, x: dragging.x, y: dragging.y } : node;
   const selectedNode = board?.nodes.find(node => node.id === selected) ?? null;
 
+  const onAssetsChanged = useCallback((items: AssetItem[]) => {
+    setRemote(previous => previous ? {
+      ...previous, assets: [...new Set([...previous.assets, ...items.map(item => item.path)])],
+    } : previous);
+  }, []);
+  const attachAsset = (asset: AssetItem) => {
+    if (!history) return;
+    const id = 'node_' + crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+    const node: BoardNode = { id, kind: 'asset', title: asset.filename.slice(0, 100),
+      description: asset.mime + ' · ' + asset.license,
+      reference: asset.path, x: 50 + (history.present.nodes.length % 3) * 260,
+      y: 50 + Math.floor(history.present.nodes.length / 3) * 170,
+      width: 220, height: 120 };
+    commit({ type: 'add-node', node });
+    setSelected(id);
+    setView('board');
+  };
+
   return (
     <section className="flex flex-col h-full min-h-0 bg-[#101527] text-panel-text" aria-label="Game design canvas">
       <header className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-panel-border shrink-0">
@@ -154,6 +173,9 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
         <button type="button" onClick={() => setView('diff')} aria-pressed={view === 'diff'}
           className={'px-2 py-1 rounded text-xs flex items-center gap-1 ' + (view === 'diff' ? 'bg-panel-accent text-white' : 'bg-panel-bg')}>
           <FileCode2 size={13} /> Code diff</button>
+        <button type="button" onClick={() => setView('assets')} aria-pressed={view === 'assets'}
+          className={'px-2 py-1 rounded text-xs ' + (view === 'assets' ? 'bg-panel-accent text-white' : 'bg-panel-bg')}>
+          Asset Library</button>
         <button type="button" title="Undo" aria-label="Undo" disabled={!history?.past.length}
           onClick={() => setHistory(h => h ? undoBoard(h) : null)} className="px-2 py-1 disabled:opacity-30"><ArrowLeft size={16} /></button>
         <button type="button" title="Redo" aria-label="Redo" disabled={!history?.future.length}
@@ -166,7 +188,9 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
       </header>
       {message && <div role="status" className={'px-3 py-2 text-xs border-b border-panel-border ' +
         (conflict ? 'text-amber-300' : 'text-panel-muted')}>{message}</div>}
-      {view === 'diff' ? (
+      {view === 'assets' ? (
+        <AssetLibrary sessionId={sessionId} onAttach={attachAsset} onCatalogChanged={onAssetsChanged} />
+      ) : view === 'diff' ? (
         <div className="flex-1 min-h-0 overflow-auto p-4">
           <p className="text-xs text-panel-muted mb-3">Uncommitted changes in scripts/game.js versus the workspace Git index.</p>
           <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-6 bg-panel-bg p-4 rounded-lg">
@@ -218,6 +242,11 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
                     <span className="block text-[10px] uppercase tracking-wider text-panel-muted">{node.kind}</span>
                     <strong className="block mt-1 text-sm truncate">{node.title}</strong>
                     <span className="block mt-1 text-xs text-panel-muted line-clamp-2">{node.description || node.reference || 'Click to inspect'}</span>
+                    {node.kind === 'asset' && /assets\/[a-f0-9]{64}\.(png|jpg|webp)$/.test(node.reference || '') && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="" src={'/api/assets/' + sessionId + '/' + node.reference!.split('/')[1].split('.')[0]}
+                        className="absolute bottom-1 right-2 w-10 h-10 object-contain" />
+                    )}
                   </button>;
                 })}
               </div>

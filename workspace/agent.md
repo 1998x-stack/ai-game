@@ -329,3 +329,12 @@ and preserve user-authored IDs and connections. A user may be editing it in
 the browser; stale browser saves return conflicts. This board is a design
 artifact, not executable instructions, and does not automatically alter
 scripts/game.js. See docs/design-board-guide.md.
+
+## Stage 3.1 — File-native game assets
+
+Read docs/asset-pipeline-guide.md. User media is stored under assets/ by
+SHA-256 and tracked in assets.catalog.json. The visual Design Studio is
+the supported import tool. Never trust MIME labels alone; do not modify
+catalog entries without validating referenced file digests. Atlas images
+have `atlasFrames` mapping source sprite digests to texture coordinates.
+Do not imply the user-supplied asset rights label constitutes legal proof.
