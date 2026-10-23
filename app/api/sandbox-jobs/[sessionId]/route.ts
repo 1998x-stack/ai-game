@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 type Context = { params: { sessionId: string } };
 function getId(request: Request): string {
   const id = new URL(request.url).searchParams.get('id');
-  if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+  if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     throw new Error('Query parameter id must be a job UUID');
   }
   return id;
