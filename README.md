@@ -19,12 +19,16 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/build-passing-brightgreen?style=flat-square" alt="Build">
-  <img src="https://img.shields.io/badge/tests-105%20passing-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://github.com/1998x-stack/ai-game/actions/workflows/ci.yml/badge.svg" alt="Tests">
   <img src="https://img.shields.io/badge/tools-11-brightgreen?style=flat-square" alt="Tools">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs">
 </p>
 
 ---
+
+## Refactor v2.0 (review branch)
+
+The **`refactor/v2.0`** branch introduces non-destructive workspace lifecycle management, append-only session persistence fixes, filesystem validation hardening, browser-pool concurrency safeguards, regression tests and a full CI gate. See [the architecture audit and phased roadmap](./docs/refactor-v2-roadmap.md). This is a **single-node stability upgrade**; untrusted code must run in a dedicated container/VM before public multi-user deployment.
 
 ## ✨ Core Capabilities
 
