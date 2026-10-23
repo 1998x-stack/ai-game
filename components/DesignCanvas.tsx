@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, FileCode2, GitBranch, Plus, RefreshCw, Save, Tra
 import { editBoard, newBoardHistory, redoBoard, undoBoard, type BoardHistory } from '@/lib/design-board/history';
 import { type BoardNode, type BoardNodeKind } from '@/lib/design-board/model';
 import AssetLibrary, { type AssetItem } from '@/components/AssetLibrary';
+import SandboxConsole from '@/components/SandboxConsole';
 
 interface WorkspaceBoardResponse {
   board: BoardHistory['present'];
@@ -29,7 +30,7 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
-  const [view, setView] = useState<'board' | 'diff' | 'assets'>('board');
+  const [view, setView] = useState<'board' | 'diff' | 'assets' | 'sandbox'>('board');
   const [dragging, setDragging] = useState<{ id: string; x: number; y: number } | null>(null);
   const drag = useRef<DragState | null>(null);
   const canvas = useRef<HTMLDivElement | null>(null);
@@ -176,6 +177,9 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
         <button type="button" onClick={() => setView('assets')} aria-pressed={view === 'assets'}
           className={'px-2 py-1 rounded text-xs ' + (view === 'assets' ? 'bg-panel-accent text-white' : 'bg-panel-bg')}>
           Asset Library</button>
+        <button type="button" onClick={() => setView('sandbox')} aria-pressed={view === 'sandbox'}
+          className={'px-2 py-1 rounded text-xs ' + (view === 'sandbox' ? 'bg-panel-accent text-white' : 'bg-panel-bg')}>
+          Isolated Tests</button>
         <button type="button" title="Undo" aria-label="Undo" disabled={!history?.past.length}
           onClick={() => setHistory(h => h ? undoBoard(h) : null)} className="px-2 py-1 disabled:opacity-30"><ArrowLeft size={16} /></button>
         <button type="button" title="Redo" aria-label="Redo" disabled={!history?.future.length}
@@ -188,7 +192,9 @@ export default function DesignCanvas({ sessionId }: { sessionId: string }) {
       </header>
       {message && <div role="status" className={'px-3 py-2 text-xs border-b border-panel-border ' +
         (conflict ? 'text-amber-300' : 'text-panel-muted')}>{message}</div>}
-      {view === 'assets' ? (
+      {view === 'sandbox' ? (
+        <SandboxConsole sessionId={sessionId} />
+      ) : view === 'assets' ? (
         <AssetLibrary sessionId={sessionId} onAttach={attachAsset} onCatalogChanged={onAssetsChanged} />
       ) : view === 'diff' ? (
         <div className="flex-1 min-h-0 overflow-auto p-4">

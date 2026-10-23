@@ -59,6 +59,14 @@ to be enabled in all Docker configurations. Deploy only to explicitly
 trusted test environments until kernel, user namespaces, seccomp/AppArmor,
 nonroot daemon/rootless, audit and vulnerability hardening are reviewed.
 
+## Studio console
+
+Stage 3.0 Design Canvas now has an **Isolated Tests** tab. It submits the
+current already-built game and game.test.json, displays job state, test result
+and evidence path, and requests cancellation using the session-scoped API.
+Unconfigured images fail closed with a visible error; the UI cannot run
+Docker commands or switch to the old host browser pool.
+
 ## API and job lifecycle
 
 POST /api/sandbox-jobs/:sessionId

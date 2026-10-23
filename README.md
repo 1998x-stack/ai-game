@@ -306,3 +306,6 @@ JSON evidence and cancellable queue receipts are persisted locally.
 See [Stage 4.0 details](docs/stage-4.0-isolated-execution.md) and the
 session-bound /api/sandbox-jobs/<sessionId> API. Host browser fallback is
 **development-only** and never safe for arbitrary untrusted games.
+
+Stage 4.0 Isolated Tests is also available inside the Design Canvas tab,
+with Run, Cancel and status tracking; it never bypasses owner permissions.

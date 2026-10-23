@@ -151,4 +151,28 @@ describe.skipIf(!enabled)('real visual workspace browser UX', () => {
     }
   }, 100_000);
 
+
+  it('shows fail-closed Docker configuration error in Studio rather than running host browser', async () => {
+    await startServer();
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage({ viewport: { width: 1320, height: 900 } });
+      page.setDefaultTimeout(20_000);
+      await page.addInitScript(() => localStorage.setItem('ai-game-settings', JSON.stringify({
+        provider: 'DeepSeek', apiKey: '', baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-chat', githubToken: '',
+      })));
+      const created = await page.request.post(origin + '/api/session');
+      const { sessionId } = await created.json() as { sessionId: string };
+      await page.goto(origin + '/?session=' + sessionId,
+        { waitUntil: 'domcontentloaded', timeout: 50_000 });
+      await page.getByRole('tab', { name: 'Design Canvas' }).click();
+      await page.getByRole('button', { name: 'Isolated Tests' }).click();
+      await page.getByRole('region', { name: 'Isolated test console' }).waitFor();
+      await page.getByRole('button', { name: 'Run isolated test' }).click();
+      await page.getByText(/requires a locally cached immutable image SHA-256/).waitFor();
+      expect(await page.getByText('No isolated test started in this Studio view.').isVisible()).toBe(true);
+    } finally { await browser.close(); }
+  }, 100_000);
+
 });
