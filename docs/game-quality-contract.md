@@ -11,7 +11,7 @@ evaluation, GameSmith's execution feedback, and OhMyGame's file-native
 workspace design. No external code is copied.
 
 ## Input JSON
-See `workspace/examples/game.test.json` for a schemaVersion 1 example.
+See `templates/snake/game.test.json` for a schemaVersion 1 example.
 
 Allowed actions:
 - `{"type":"key","key":"ArrowUp"}` (optional `holdMs` of 1–3000)

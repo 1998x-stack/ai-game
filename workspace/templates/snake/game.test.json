@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "name": "Snake: canvas and controls",
+  "seed": 20261023,
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "scenarios": [
+    {
+      "id": "boot",
+      "name": "Canvas initialized",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 300
+        }
+      ],
+      "assertions": [
+        {
+          "type": "canvas-size",
+          "minWidth": 640,
+          "minHeight": 480
+        },
+        {
+          "type": "state-equals",
+          "key": "gameOver",
+          "value": false
+        },
+        {
+          "type": "no-errors"
+        }
+      ]
+    },
+    {
+      "id": "move",
+      "name": "Direction changes",
+      "actions": [
+        {
+          "type": "key",
+          "key": "Space"
+        },
+        {
+          "type": "wait",
+          "ms": 200
+        },
+        {
+          "type": "key",
+          "key": "ArrowUp"
+        },
+        {
+          "type": "wait",
+          "ms": 200
+        }
+      ],
+      "assertions": [
+        {
+          "type": "canvas-size",
+          "minWidth": 640,
+          "minHeight": 480
+        },
+        {
+          "type": "no-errors"
+        }
+      ]
+    }
+  ]
+}

@@ -250,7 +250,7 @@ Playwright tests. Run `build_game`, then `game_runtime` to save a structured
 report in `output/playtests/`. Legacy game testing is preserved when no
 contract exists. See [the developer guide](docs/game-quality-contract.md),
 [stage architecture and acceptance gates](docs/staged-architecture-plan.md)
-and [example contract](workspace/examples/game.test.json).
+and [example contract](workspace/templates/snake/game.test.json).
 
 The test state probe uses `window.__GAME_TEST__.getState()` and should expose
 small, non-sensitive scalar values only. Seeded `Math.random` is not full
