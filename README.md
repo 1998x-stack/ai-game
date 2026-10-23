@@ -241,3 +241,17 @@ MIT © 2024 AI Game Studio
 <p align="center">
   <sub>Built with ❤️ using <a href="https://nextjs.org">Next.js</a> · <a href="https://platform.deepseek.com">DeepSeek</a> · <a href="https://tailwindcss.com">Tailwind CSS</a> · <a href="https://playwright.dev">Playwright</a></sub>
 </p>
+
+
+## Stage 2.1 — Contract-driven Game Quality (development branch)
+
+This branch adds a bounded `game.test.json` specification for deterministic
+Playwright tests. Run `build_game`, then `game_runtime` to save a structured
+report in `output/playtests/`. Legacy game testing is preserved when no
+contract exists. See [the developer guide](docs/game-quality-contract.md),
+[stage architecture and acceptance gates](docs/staged-architecture-plan.md)
+and [example contract](workspace/examples/game.test.json).
+
+The test state probe uses `window.__GAME_TEST__.getState()` and should expose
+small, non-sensitive scalar values only. Seeded `Math.random` is not full
+time-deterministic replay; this feature is not a security sandbox.
