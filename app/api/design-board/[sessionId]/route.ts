@@ -22,8 +22,17 @@ function guard(request: Request, sessionId: string, mutation: boolean): Response
   }
   if (mutation) {
     const origin = request.headers.get('origin');
-    if (!origin || origin !== new URL(request.url).origin ||
-        request.headers.get('sec-fetch-site') === 'cross-site') {
+    const targetHost = request.headers.get('host') || new URL(request.url).host;
+    const proto = (request.headers.get('x-forwarded-proto') ||
+      new URL(request.url).protocol.replace(':', '')).split(',')[0].trim();
+    let sameOrigin = false;
+    try {
+      const incoming = origin ? new URL(origin) : null;
+      sameOrigin = Boolean(incoming && incoming.host === targetHost &&
+        incoming.protocol === proto + ':' && incoming.pathname === '/' &&
+        !incoming.search && !incoming.hash && !incoming.username && !incoming.password);
+    } catch { /* reject malformed Origin */ }
+    if (!sameOrigin || request.headers.get('sec-fetch-site') === 'cross-site') {
       return Response.json({ error: 'Same-origin request required' }, { status: 403 });
     }
   }
