@@ -1,3 +1,4 @@
+import { executeAgentLoop, type AgentLoopAction } from '@/lib/agent-loop/service';
 import { executeGameDesignCommand, type GameDesignCommand } from '@/lib/game-design/commands';
 import fs from 'fs';
 import path from 'path';
@@ -171,6 +172,22 @@ const gameDesignDef: ToolDefinition = {
     },
     required: ['action'],
     additionalProperties: false,
+  },
+};
+
+const gameLoopDef: ToolDefinition = {
+  name: 'game_loop',
+  description: 'Stage 2.3 bounded autonomous game development and repair. Actions: start(goal, budgets), advance(one durable stage only), status. Requires validated workspace game.design.json; never approves or publishes. Repeatedly call advance until awaiting-approval or needs-human. The project owner must approve using authenticated API.',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['start','advance','status'] },
+      goal: { type: 'string', description: 'Requested game improvement, 8–2000 chars (start only)' },
+      maxAttempts: { type: 'integer', minimum: 1, maximum: 3 },
+      tokenBudget: { type: 'integer', minimum: 1000, maximum: 20000 },
+      durationMinutes: { type: 'integer', minimum: 1, maximum: 10 },
+    },
+    required: ['action'], additionalProperties: false,
   },
 };
 
@@ -817,6 +834,16 @@ async function gameDesignHandler(
   }
 }
 
+async function gameLoopHandler(args: Record<string, unknown>, root: string, config?: AgentConfig) {
+  if (!['start','advance','status'].includes(String(args.action))) {
+    return 'GAME LOOP ERROR: unknown action';
+  }
+  if (args.action === 'start' && typeof args.goal !== 'string') {
+    return 'GAME LOOP ERROR: a development goal is required';
+  }
+  return executeAgentLoop(root, args as AgentLoopAction, config);
+}
+
 async function gameRuntimeHandler(
   args: Record<string, unknown>,
   root: string,
@@ -1041,6 +1068,7 @@ export const toolRegistry: ToolHandler[] = [
   { definition: delegateSubagentDef, handler: delegateSubagentHandler },
   { definition: gameRuntimeDef, handler: gameRuntimeHandler },
   { definition: gameDesignDef, handler: gameDesignHandler },
+  { definition: gameLoopDef, handler: gameLoopHandler },
   { definition: gitLogDef, handler: gitLogHandler },
   { definition: gitDiffDef, handler: gitDiffHandler },
   { definition: gitStatusDef, handler: gitStatusHandler },
