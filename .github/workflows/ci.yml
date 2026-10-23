@@ -1,9 +1,9 @@
 name: Verify
 on:
   push:
-    branches: [main, 'refactor/**']
+    branches: [main, 'refactor/**', 'stage/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'refactor/**', 'stage/**']
 permissions:
   contents: read
 jobs:
