@@ -70,6 +70,13 @@ function ident(value: unknown, where: string): string {
   }
   return value;
 }
+// Game genre 2048 uses a digit-prefixed skill slug, never a filesystem path.
+function skillId(value: unknown, where: string): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)) {
+    throw new Error(where + ' must be a safe skill slug');
+  }
+  return value;
+}
 function label(value: unknown, where: string, max = 80): string {
   if (typeof value !== 'string' || value.trim().length === 0 ||
       value.length > max || /[\u0000-\u001f]/.test(value)) {
@@ -102,7 +109,7 @@ export function parseGameDesignDocument(raw: unknown): GameDesignDocument {
     const m = record(item, p);
     keys(m, ['id', 'description', 'skill'], p);
     return { id: ident(m.id, p + '.id'), description: label(m.description, p + '.description', 300),
-      skill: ident(m.skill, p + '.skill') };
+      skill: skillId(m.skill, p + '.skill') };
   });
   distinct(mechanics.map(m => m.id), 'mechanic ids');
 
