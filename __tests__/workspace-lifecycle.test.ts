@@ -18,6 +18,8 @@ describe('workspace lifecycle', () => {
     const id = crypto.randomUUID();
     ids.push(id);
     const first = await createWorkspace(id);
+    expect(fs.existsSync(path.join(first.workspacePath, 'docs', 'game-quality-contract.md'))).toBe(true);
+    expect(fs.existsSync(path.join(first.workspacePath, 'templates', 'snake', 'game.test.json'))).toBe(true);
     const draftPath = path.join(first.workspacePath, 'scripts', 'draft.js');
     fs.writeFileSync(draftPath, 'const importantProgress = 42;');
     await restoreWorkspace(id);

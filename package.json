@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:browser": "RUN_REAL_PLAYWRIGHT=1 vitest run __tests__/quality-browser.test.ts"
   },
   "dependencies": {
     "acorn": "^8.18.0",

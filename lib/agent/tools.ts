@@ -12,6 +12,8 @@ import { generateTestScenario, type TestAction } from '@/lib/runtime/test-engine
 import { injectPerfMonitor, extractPerfMetrics } from '@/lib/runtime/perf-monitor';
 import { generateTextReport } from '@/lib/runtime/report-generator';
 import { getBrowserPool } from '@/lib/runtime/browser-pool';
+import { parseGameTestContract } from '@/lib/runtime/game-contract';
+import { runGameQuality } from '@/lib/runtime/quality-runner';
 import { runDetectionRules, type RuntimeIssue } from '@/lib/runtime/engine';
 import { validateBaseUrl, validateWorkspacePath, redactSecrets } from '@/lib/security/validation';
 import { executeTool } from './tool-kernel';
@@ -158,7 +160,7 @@ const delegateSubagentDef: ToolDefinition = {
 
 const gameRuntimeDef: ToolDefinition = {
   name: 'game_runtime',
-  description: 'Run the built game in a headless browser and use the fallback model (deepseek-v4-flash) to play it for edge-case testing. Loads output/index.html, extracts game state, sends it to the model for action decisions at a controlled FPS, and returns a test report. Use AFTER build_game succeeds. Tests boundary collisions, self-collision, game-over triggers, and other runtime behaviors. Do NOT use on unbuilt or broken games.',
+  description: 'Run the built game in a headless browser and use the fallback model (deepseek-v4-flash) to play it for edge-case testing. If game.test.json exists, executes deterministic contract scenarios, verifies assertions and saves JSON evidence in output/playtests. Otherwise, runs legacy template/model-driven probing. Returns a test report. Use AFTER build_game succeeds. Tests boundary collisions, self-collision, game-over triggers, and other runtime behaviors. Do NOT use on unbuilt or broken games.',
   parameters: {
     type: 'object',
     properties: {
@@ -798,6 +800,24 @@ async function gameRuntimeHandler(
   }
 
   const html = fs.readFileSync(outputPath, 'utf-8');
+
+  // Stage 2.1: explicit, machine-verifiable game.test.json takes precedence.
+  // Legacy heuristic + model-driven probing remains for uninstrumented games.
+  const contractPath = path.join(root, 'game.test.json');
+  if (fs.existsSync(contractPath) && fs.statSync(contractPath)?.isFile()) {
+    try {
+      const source = fs.readFileSync(contractPath, 'utf-8');
+      if (Buffer.byteLength(source, 'utf-8') > 64_000) {
+        throw new Error('game.test.json exceeds 64 KB');
+      }
+      const contract = parseGameTestContract(JSON.parse(source));
+      const result = await runGameQuality({ workspaceRoot: root, html, contract });
+      return result.text;
+    } catch (error) {
+      return 'GAME TEST CONTRACT ERROR: ' +
+        (error instanceof Error ? error.message : String(error)).slice(0, 400);
+    }
+  }
 
   // Analyze game code to determine test approach
   const gameJsPath = path.join(root, 'scripts', 'game.js');
