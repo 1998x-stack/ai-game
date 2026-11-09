@@ -122,7 +122,9 @@ export function buildGame(workspacePath: string): BuildResult {
   }
 
   if (scripts.length === 0) {
-    return writeFallbackOutput(outputDir, 'Failed to read any valid .js files');
+    return writeFallbackOutput(outputDir, errors.length
+      ? errors.join('; ')
+      : 'Failed to read any valid .js files');
   }
 
   const assetMap: { key: string; dataUri: string }[] = [];
