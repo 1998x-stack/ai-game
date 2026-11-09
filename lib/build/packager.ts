@@ -81,6 +81,10 @@ export function buildGame(workspacePath: string): BuildResult {
 
   let scriptFiles: string[];
   try {
+    // Prevent scripts/ from pointing outside the session through an imported symlink.
+    if (fs.lstatSync(scriptsDir).isSymbolicLink()) {
+      return writeFallbackOutput(outputDir, 'scripts/ must not be a symbolic link');
+    }
     const allFiles = fs.readdirSync(scriptsDir);
     scriptFiles = scriptSort(allFiles.filter(f => f.endsWith('.js')));
   } catch (e) {
@@ -94,7 +98,13 @@ export function buildGame(workspacePath: string): BuildResult {
   const scripts: { name: string; content: string }[] = [];
   for (const file of scriptFiles) {
     try {
-      const content = fs.readFileSync(path.join(scriptsDir, file), 'utf-8');
+      const fullPath = path.join(scriptsDir, file);
+      // readFileSync follows symbolic links, which can otherwise package host secrets.
+      if (!fs.lstatSync(fullPath).isFile()) {
+        errors.push(`Script "${file}" must be a regular file (no symlinks)`);
+        continue;
+      }
+      const content = fs.readFileSync(fullPath, 'utf-8');
       if (Buffer.byteLength(content, 'utf8') > CONFIG.build.maxScriptBytes) {
         errors.push(`Script "${file}" exceeds the ${CONFIG.build.maxScriptBytes}-byte limit`);
         continue;
@@ -118,11 +128,19 @@ export function buildGame(workspacePath: string): BuildResult {
   const assetMap: { key: string; dataUri: string }[] = [];
   let totalAssetBytes = 0;
   try {
+    if (fs.lstatSync(assetsDir).isSymbolicLink()) {
+      errors.push('assets/ must not be a symbolic link');
+    } else {
     const assetFiles = fs.readdirSync(assetsDir);
     for (const file of assetFiles) {
       const fullPath = path.join(assetsDir, file);
       try {
-        if (fs.statSync(fullPath).isFile()) {
+        // Use lstat, not stat: an asset symlink may resolve outside the workspace.
+        if (fs.lstatSync(fullPath).isSymbolicLink()) {
+          errors.push(`Asset "${file}" must not be a symbolic link`);
+          continue;
+        }
+        if (fs.lstatSync(fullPath).isFile()) {
           const buf = fs.readFileSync(fullPath);
           if (buf.byteLength > CONFIG.build.maxAssetBytes) {
             errors.push(`Asset "${file}" exceeds the ${CONFIG.build.maxAssetBytes}-byte limit`);
@@ -141,7 +159,12 @@ export function buildGame(workspacePath: string): BuildResult {
         errors.push(`Failed to read asset "${file}": ${(e as Error).message}`);
       }
     }
-  } catch { /* assets/ missing is fine */ }
+    }
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      errors.push(`Failed to inspect assets directory: ${(e as Error).message}`);
+    }
+  }
 
   // Prevent an agent-provided string/comment containing </script> from ending the HTML script element.
   const allCode = scripts.map(s => s.content).join('\n').replace(/<\/(script)/gi, '<\\/$1');

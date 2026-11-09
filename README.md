@@ -296,3 +296,15 @@ preview media, link it to asset nodes, and generate deterministic PNG
 spritesheets with frame coordinates. Catalog and blobs remain file-native;
 duplicates are reused and unsafe content is rejected. See
 [Stage 3.1 developer guide](docs/stage-3.1-asset-pipeline.md).
+
+## P3 · Generated-asset symlink boundary (2026-11-09)
+
+The generated-game packager now uses `lstat` before reading scripts and assets, and explicitly refuses symbolic links for the top-level `scripts/` and `assets/` directories. Without that check, `readFileSync`/`statSync` could follow an imported symlink outside an individual game workspace and embed an external file into the assembled HTML, potentially exposing local information in the preview. Tests build temporary external targets, confirm refusal and ensure the resulting HTML does not contain marker data. The original build rules, size limits and atomic successful output remain in place.
+
+```bash
+npm ci
+npm test -- __tests__/packager.test.ts
+npm run typecheck
+```
+
+This is a targeted file-system boundary regression, **not** a complete security audit of the API, sessions, agents or generated code. The production deployment still requires a server and separate secret management.
